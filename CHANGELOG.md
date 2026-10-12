@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.8 (2026-10-12)
+
+### Changed
+
+- **Breaking:** output modes are `-m sm` / `--mode small`, `-m md` / `--mode medium` and
+  `-m lg` / `--mode large` (default) in `add`, `sln` and `rm`. The 0.4.6 names exit 1 with a hint:
+  `q`/`quiet` → `sm`, `s`/`silent` → `md`, `c`/`clear` → `lg`.
+- `add` and `sln` end with a summary line, `Installed N skills · <names>` or
+  `Symlinked N skills · <names>`; `sm` prints only that line (no `from <source>` any more).
+- The progress line names the count and drops the summary: `Installing 1 skill from <source>
+  ██████████ 100%`, `Symlinking 2 skills from <path> ██████████ 100%`.
+- `add` progress bar: it appears once `registry.npmjs.org` resolves or `npx` prints anything, fills
+  seven cells 150 ms apart, then the eighth when `npx` starts printing and the ninth when every
+  `-s` skill is on disk. Without `-s` it no longer shows a moving block.
+- `add` without `-m` (`lg`) prints the `md` lines after the `npx` output when a skill changed.
+- `sln` no longer logs each link as `path -> target` or the skipped skills; `lg` and `md` look the
+  same.
+
 ## 0.4.7 (2026-10-10)
 
 ### Added

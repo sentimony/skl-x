@@ -1,19 +1,30 @@
-export type OutputMode = 'clear' | 'silent' | 'quiet';
+// sm: one summary line; md: progress line, table, summary; lg: md plus details (e.g. the npx output)
+export type OutputMode = 'sm' | 'md' | 'lg';
 
 export type ModeResult =
   | { kind: 'ok'; mode: OutputMode; rest: string[] }
   | { kind: 'error'; message: string };
 
 const VALUES = new Map<string, OutputMode>([
-  ['clear', 'clear'],
-  ['c', 'clear'],
-  ['silent', 'silent'],
-  ['s', 'silent'],
-  ['quiet', 'quiet'],
-  ['q', 'quiet'],
+  ['sm', 'sm'],
+  ['small', 'sm'],
+  ['md', 'md'],
+  ['medium', 'md'],
+  ['lg', 'lg'],
+  ['large', 'lg'],
 ]);
 
-const CHOICES = 'clear (c), silent (s) or quiet (q)';
+// the 0.4.6 names; s is not an alias of sm, it was the md output
+const REMOVED = new Map<string, OutputMode>([
+  ['quiet', 'sm'],
+  ['q', 'sm'],
+  ['silent', 'md'],
+  ['s', 'md'],
+  ['clear', 'lg'],
+  ['c', 'lg'],
+]);
+
+const CHOICES = 'sm (small), md (medium) or lg (large)';
 
 export function extractMode(argv: string[]): ModeResult {
   const rest: string[] = [];
@@ -34,6 +45,10 @@ export function extractMode(argv: string[]): ModeResult {
       continue;
     }
     const mode = VALUES.get(value);
+    const renamed = REMOVED.get(value);
+    if (renamed !== undefined) {
+      return { kind: 'error', message: `mode "${value}" was renamed in 0.4.8, use ${renamed}` };
+    }
     if (mode === undefined) {
       return { kind: 'error', message: `unknown mode "${value}", use ${CHOICES}` };
     }
@@ -42,5 +57,5 @@ export function extractMode(argv: string[]): ModeResult {
     }
     chosen = mode;
   }
-  return { kind: 'ok', mode: chosen ?? 'clear', rest };
+  return { kind: 'ok', mode: chosen ?? 'lg', rest };
 }

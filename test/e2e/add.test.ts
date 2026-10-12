@@ -89,18 +89,19 @@ describe('skl add', () => {
     for (const r of [a, b]) expect(r.stderr).not.toMatch(/skl (add|sln)|Unknown option/);
   });
 
-  it('-m s hides the npx output and prints a summary table', () => {
+  it('-m md hides the npx output and prints the progress line, a table and a summary', () => {
     const { stdout, exitCode } = run(
-      ['add', 'sentimony/skills', '-s', 'cross-review', '-a', 'codex', 'claude-code', '-y', '-m', 's'],
+      ['add', 'sentimony/skills', '-s', 'cross-review', '-a', 'codex', 'claude-code', '-y', '-m', 'md'],
       TMP,
       { ...ENV, NPX_SEED: 'cross-review' },
     );
     expect(exitCode).toBe(0);
     expect(stdout).toBe(
       [
-        'Installing from https://github.com/sentimony/skills ██████████ 100% · Installed 1 skill',
+        'Installing 1 skill from https://github.com/sentimony/skills ██████████ 100%',
         'skill         .agents    .claude    skills-lock.json  cost',
         'cross-review  universal  symlinked  -                 ~4 tok',
+        'Installed 1 skill · cross-review',
         '',
       ].join('\n'),
     );
@@ -118,8 +119,8 @@ describe('skl add', () => {
     ]);
   });
 
-  it('-m s prints the npx output when npx fails', () => {
-    const { stdout, exitCode } = run(['add', 'sentimony/skills', '-y', '-m', 's'], TMP, ENV);
+  it('-m md prints the npx output when npx fails', () => {
+    const { stdout, exitCode } = run(['add', 'sentimony/skills', '-y', '-m', 'md'], TMP, ENV);
     expect(exitCode).toBe(3);
     expect(stdout).toContain('NOISE');
   });
@@ -131,7 +132,7 @@ describe('skl add', () => {
     expect(stdout).not.toContain('-ln');
   });
 
-  it('clear shows the npx output, then the table', () => {
+  it('lg (default) shows the npx output, then the md output', () => {
     const { stdout, exitCode } = run(
       ['add', 'sentimony/skills', '-s', 'cross-review', '-a', 'codex', 'claude-code', '-y'],
       TMP,
@@ -141,22 +142,24 @@ describe('skl add', () => {
     expect(stdout).toBe(
       [
         'NOISE',
+        'Installing 1 skill from https://github.com/sentimony/skills ██████████ 100%',
         'skill         .agents    .claude    skills-lock.json  cost',
         'cross-review  universal  symlinked  -                 ~4 tok',
+        'Installed 1 skill · cross-review',
         '',
       ].join('\n'),
     );
   });
 
-  it('-m q prints one line, and needs -y', () => {
-    const ok = run(['add', 'sentimony/skills', '-s', 'cross-review', '-y', '-m', 'q'], TMP, {
+  it('-m sm prints the summary line only, and needs -y', () => {
+    const ok = run(['add', 'sentimony/skills', '-s', 'cross-review', '-y', '-m', 'sm'], TMP, {
       ...ENV,
       NPX_SEED: 'cross-review',
     });
     expect(ok.exitCode).toBe(0);
-    expect(ok.stdout).toBe('Installed 1 skill from https://github.com/sentimony/skills\n');
-    const noYes = run(['add', 'sentimony/skills', '-m', 'q'], TMP, ENV);
+    expect(ok.stdout).toBe('Installed 1 skill · cross-review\n');
+    const noYes = run(['add', 'sentimony/skills', '-m', 'sm'], TMP, ENV);
     expect(noYes.exitCode).toBe(1);
-    expect(noYes.stderr).toContain('--mode quiet needs -y/--yes');
+    expect(noYes.stderr).toContain('--mode sm needs -y/--yes');
   });
 });

@@ -14,9 +14,10 @@ import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } fr
 import { readLock } from '../lock/file';
 import { createConfirmer } from '../utils/confirm';
 import { extractMode, type OutputMode } from '../utils/mode';
-import { createProgress } from '../utils/progress';
+import { renderBar } from '../utils/progress';
 import { extractFrontmatter, parseSkillMeta } from '../utils/skill-files';
 import { collectRows, renderSkillTable } from '../utils/skill-table';
+import { summaryLine } from './add';
 
 export type Agent = 'codex' | 'claude-code';
 
@@ -265,13 +266,6 @@ function describeExisting(step: SymlinkStep): string {
   return step.existing === 'symlink' ? `symlink -> ${step.existingTarget}` : step.existing;
 }
 
-function describeStep(step: SymlinkStep): string {
-  const link = `${step.dir}/${step.name} -> ${step.target}`;
-  if (step.action === 'replace') return `${link} (replaced ${describeExisting(step)})`;
-  if (step.action === 'same') return `${link} (unchanged)`;
-  return link;
-}
-
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
@@ -286,8 +280,7 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
   const cwd = deps.cwd ?? process.cwd();
   // createConfirmer, not confirm: on non-TTY stdin it reads to EOF and answers no instead of hanging
   const ask = deps.confirm ?? createConfirmer();
-  const mode = deps.mode ?? 'clear';
-  const skipped: string[] = [];
+  const mode = deps.mode ?? 'lg';
 
   const sourceAbs = resolve(cwd, source);
   if (!statSync(sourceAbs, { throwIfNoEntry: false })?.isDirectory()) {
@@ -307,18 +300,12 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
       return 1;
     }
     const rejected = new Set(rejects);
-    for (const c of candidates)
-      if (c.internal && !rejected.has(c.name)) skipped.push(`skip ${c.name} (metadata.internal)`);
-    for (const c of candidates) if (rejected.has(c.name)) skipped.push(`skip ${c.name} (-x)`);
     names = candidates.filter((c) => !c.internal && !rejected.has(c.name)).map((c) => c.name);
     if (names.length === 0) {
-      if (mode === 'clear') for (const line of skipped) console.log(line);
       console.log(`No skills to symlink in ${source}.`);
       return 0;
     }
   } else {
-    for (const n of skills)
-      if (n.startsWith(' ')) skipped.push(`skip ${n.trimStart()} (leading space)`);
     names = [...new Set(skills.filter((n) => !n.startsWith(' ')))];
     const missing = names.filter((n) => !existsSync(join(skillsAbs, n, 'SKILL.md')));
     if (missing.length > 0) {
@@ -342,28 +329,17 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
     const count = new Set(replaced.map((s) => s.name)).size;
     if (!(await ask(`Replace ${plural(count, 'existing skill')}?`))) return 1;
   }
-  if (mode === 'clear') {
-    for (const line of skipped) console.log(line);
-    for (const s of steps) console.log(describeStep(s));
-  }
-  if (mode === 'quiet') {
-    applySymlinks(steps);
-    console.log(
-      names.length === 0
-        ? `No skills to symlink in ${source}.`
-        : `Symlinked ${plural(names.length, 'skill')} from ${source}`,
-    );
+  if (names.length === 0) {
+    console.log(`No skills to symlink in ${source}.`);
     return 0;
   }
-  // after the Replace prompt, so the bar never interleaves with it
-  const progress = createProgress(`Symlinking from ${source}`);
-  progress.update(0);
-  names.forEach((name, i) => {
-    applySymlinks(steps.filter((s) => s.name === name));
-    progress.update((i + 1) / names.length);
-  });
-  progress.done(`Symlinked ${plural(names.length, 'skill')}`);
-  if (names.length === 0) return 0;
+  applySymlinks(steps);
+  if (mode === 'sm') {
+    console.log(summaryLine('Symlinked', names));
+    return 0;
+  }
+  // md and lg look the same: each link as "path -> target" was more noise than detail
+  console.log(`Symlinking ${plural(names.length, 'skill')} from ${source} ${renderBar(1)}`);
   const roots = {
     agents: join(cwd, AGENT_DIRS.codex),
     claude: join(cwd, AGENT_DIRS['claude-code']),
@@ -372,6 +348,7 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
   const rows = collectRows(names, roots, lockNames);
   for (const line of renderSkillTable(rows, { lockLabel: 'skills-lock.json', total: false }))
     console.log(line);
+  console.log(summaryLine('Symlinked', names));
   return 0;
 }
 
@@ -387,16 +364,15 @@ export const SLN_HELP = [
   '  -x, --reject        Every skill except these',
   '  -a, --agent         codex (.agents/skills), claude-code (.claude/skills) (default: both)',
   '  -y, --yes           Replace existing copies without asking',
-  '  -m, --mode          clear (c, default): each link as "path -> target" and the skipped skills,',
-  '                      then a progress line and a table',
-  '                      silent (s): the progress line and the table',
-  '                      quiet (q): one "Symlinked N skills from <path>" line',
+  '  -m, --mode          md (medium), lg (large, default): a "Symlinking N skills from <path>" line,',
+  '                      a table and a "Symlinked N skills · <names>" line',
+  '                      sm (small): the "Symlinked N skills · <names>" line only',
   '',
   'EXAMPLES',
   '',
   '  skl sln ../skills -a codex claude-code -y',
   '  skl sln ../skills -x scope-check echarts -y',
-  '  skl sln ../skills -s tdd cross-review -a claude-code -m s',
+  '  skl sln ../skills -s tdd cross-review -a claude-code -m sm',
 ].join('\n');
 
 export async function runSln(argv: string[], deps: SymlinkDeps = {}): Promise<number> {

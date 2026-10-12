@@ -28,24 +28,27 @@ npx -y skl-x add sentimony/skills -l
 # Specific skills to specific agents, non-interactive
 npx -y skl-x add sentimony/skills -s tdd cross-review -a codex claude-code -y
 
-# Hide the npx skills output, print a progress line and a table (needs -y)
-npx -y skl-x add sentimony/skills -s tdd -a codex claude-code -y -m s
+# Hide the npx skills output, print a progress line, a table and a summary (needs -y)
+npx -y skl-x add sentimony/skills -s tdd -a codex claude-code -y -m md
 
-# One line only (needs -y)
-npx -y skl-x add sentimony/skills -s tdd -a codex claude-code -y -m q
+# The summary line only (needs -y)
+npx -y skl-x add sentimony/skills -s tdd -a codex claude-code -y -m sm
 ```
 
 ```text
-Installing from https://github.com/sentimony/skills ██████████ 100% · Installed 1 skill
+Installing 1 skill from https://github.com/sentimony/skills ██████████ 100%
 skill  .agents    .claude    skills-lock.json  cost
 tdd    universal  symlinked  +                 ~125 tok
+Installed 1 skill · tdd
 ```
 
-Without `-m`, the `npx skills add` output is shown as is, followed by the table of the skills it
-changed.
+Without `-m` (`lg`), the `npx skills add` output is shown as is, followed by the same lines when
+it changed any skill.
 
-In a terminal the bar fills while `npx` runs; in scripts and CI only the final line is printed.
-If `npx` fails, its full output is printed.
+In a terminal the bar appears once the npm registry resolves (or `npx` prints anything): the first
+seven cells fill 150 ms apart, the eighth when `npx` starts printing, the ninth when every skill
+named with `-s` is on disk, the tenth when `npx` exits. In scripts and CI only the final line is
+printed. If `npx` fails, its full output is printed.
 
 ### Local skills
 
@@ -66,14 +69,11 @@ npx -y skl-x sln ../skills -s tdd cross-review -a claude-code
 ```
 
 ```text
-.agents/skills/cross-review -> ../../../skills/skills/cross-review
-.claude/skills/cross-review -> ../../../skills/skills/cross-review
-.agents/skills/tdd -> ../../../skills/skills/tdd
-.claude/skills/tdd -> ../../../skills/skills/tdd
-Symlinking from ../skills ██████████ 100% · Symlinked 2 skills
+Symlinking 2 skills from ../skills ██████████ 100%
 skill         .agents    .claude    skills-lock.json  cost
 cross-review  symlinked  symlinked  -                 ~186 tok
 tdd           symlinked  symlinked  -                 ~125 tok
+Symlinked 2 skills · cross-review tdd
 ```
 
 - Without `-s`, every `<path>/skills/<name>/SKILL.md` is linked (or `<path>/<name>/SKILL.md`
@@ -89,13 +89,13 @@ tdd           symlinked  symlinked  -                 ~125 tok
 | `--reject, -x <names...>` | Every skill except these (not with `-s`) |
 | `--agent, -a <agents...>` | `codex` (`.agents/skills`), `claude-code` (`.claude/skills`); default: both |
 | `--yes, -y` | Skip `npx` prompts (`add`); replace existing copies without asking (`sln`) |
-| `--mode, -m <mode>` | `clear` (`c`, default), `silent` (`s`), `quiet` (`q`); `silent` and `quiet` in `add` need `-y` |
+| `--mode, -m <mode>` | `lg` (`large`, default), `md` (`medium`), `sm` (`small`); `md` and `sm` in `add` need `-y` |
 
 | Mode | `add` | `sln` | `rm` |
 |---|---|---|---|
-| `clear` | `npx` output, then a table | `path -> target` per link, progress line, table | plan and summary |
-| `silent` | progress line and table | progress line and table | `Executed A/B/C skills` |
-| `quiet` | `Installed N skills from <source>` | `Symlinked N skills from <path>` | `Executed A/B/C skills` |
+| `lg` | `npx` output, then the `md` lines | as `md` | plan and summary |
+| `md` | progress line, table, `Installed N skills · <names>` | progress line, table, `Symlinked N skills · <names>` | `Executed A/B/C skills` |
+| `sm` | `Installed N skills · <names>` | `Symlinked N skills · <names>` | `Executed A/B/C skills` |
 
 ## Cost
 
@@ -183,7 +183,7 @@ skl-x rm tdd                     # plan, Proceed? [y/n], then Clean lock? [y/n]
 skl-x rm .                       # every skill in scope
 skl-x rm . -x tdd cross-review   # every skill except the listed ones
 skl-x rm tdd -y                  # no prompts, no plan
-skl-x rm . -y -m s               # one line: Executed A/B/C skills
+skl-x rm . -y -m sm              # one line: Executed A/B/C skills
 skl-x rm tdd --lock-only         # also --agents-only, --claude-only
 skl-x rm tdd -g                  # global scope
 ```

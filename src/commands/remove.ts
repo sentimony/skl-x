@@ -222,7 +222,7 @@ export const removeCommand = defineCommand({
       console.error(`skl rm: ${mode.message}`);
       process.exit(1);
     }
-    const stealth = mode.mode !== 'clear';
+    const stealth = mode.mode !== 'lg';
     const tokens = mode.rest;
     const rawNames: string[] = [];
     const rejects: string[] = [];
