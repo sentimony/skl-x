@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -269,6 +270,20 @@ describe('planSymlinks / runSymlink', () => {
     expect(await runSymlink(['../clone', '-s', 'tdd', 'nope', '-y'], { cwd: proj })).toBe(1);
     expect(existsSync(join(proj, '.agents'))).toBe(false);
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('nope'));
+  });
+
+  it('ends the progress line and rethrows when a link cannot be made', async () => {
+    // a read-only skills folder: planning passes, the symlink call fails
+    mkdirSync(join(proj, '.claude/skills'), { recursive: true });
+    chmodSync(join(proj, '.claude/skills'), 0o500);
+    try {
+      await expect(
+        runSymlink(['../clone', '-s', 'tdd', '-a', 'claude-code', '-y'], { cwd: proj }),
+      ).rejects.toThrow(/EACCES/);
+    } finally {
+      chmodSync(join(proj, '.claude/skills'), 0o700);
+    }
+    expect(console.log).toHaveBeenCalledWith('Symlinking 1 skill from ../clone to Project scope');
   });
 
   it('rejects ".." with -y and keeps .agents intact', async () => {

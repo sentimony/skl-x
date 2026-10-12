@@ -262,6 +262,15 @@ export interface SourceSkills {
   folder: string | null;
 }
 
+// the file's text, or undefined when it is missing or a folder
+function readIfFile(path: string): string | undefined {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
 // <dir>/SKILL.md below dir whose frontmatter name is <dir>; no symlinks, nothing inside a skill
 function walkSkills(dir: string, depth: number, out: SourceSkills): void {
   const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
@@ -272,8 +281,10 @@ function walkSkills(dir: string, depth: number, out: SourceSkills): void {
     if (!entry.isDirectory() || entry.name.startsWith('.') || SKIP_DIRS.has(entry.name)) continue;
     const child = join(dir, entry.name);
     const md = join(child, 'SKILL.md');
-    if (statSync(md, { throwIfNoEntry: false })?.isFile()) {
-      const fm = extractFrontmatter(readFileSync(md, 'utf8'));
+    // read without a stat first: a check before the read is a race (CodeQL js/file-system-race)
+    const text = readIfFile(md);
+    if (text !== undefined) {
+      const fm = extractFrontmatter(text);
       if (fm !== undefined && parseSkillMeta(fm).name === entry.name)
         out.skills.push({ name: entry.name, folder: dir });
       else out.mismatched.set(entry.name, md);
