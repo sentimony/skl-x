@@ -1,0 +1,41 @@
+name: skills-install
+
+on:
+  workflow_dispatch:
+  # sentimony/skills changes outside this repo
+  schedule:
+    - cron: '0 6,18 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install cross-review
+        run: |
+          mkdir "$RUNNER_TEMP/install"
+          cd "$RUNNER_TEMP/install"
+          git init -q
+          npx --prefer-online -y skl-x add sentimony/skills -s cross-review -a codex claude-code -y -m md
+
+      - name: Check .agents/skills and .claude/skills
+        run: |
+          cd "$RUNNER_TEMP/install"
+          agents=.agents/skills/cross-review
+          claude=.claude/skills/cross-review
+          if [ -L "$agents" ] || [ ! -f "$agents/SKILL.md" ]; then
+            echo "::error::$agents/SKILL.md missing or $agents is a symlink"; exit 1
+          fi
+          if [ ! -L "$claude" ]; then
+            echo "::error::$claude is not a symlink"; exit 1
+          fi
+          if [ "$(cd "$claude" && pwd -P)" != "$(cd "$agents" && pwd -P)" ]; then
+            echo "::error::$claude does not point to $agents"; exit 1
+          fi
+          echo "cross-review installed and linked"
