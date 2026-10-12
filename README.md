@@ -36,26 +36,33 @@ npx -y skl-x add sentimony/skills -s tdd -a codex claude-code -y -m sm
 ```
 
 ```text
-Installing 1 skill from https://github.com/sentimony/skills ██████████ 100%
+Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%
 skill  .agents    .claude    skills-lock.json  cost
 tdd    universal  symlinked  +                 ~125 tok
-Installed 1 skill · tdd
+Installed 1 skill to Project scope · tdd
 ```
 
 Without `-m` (`lg`), the `npx skills add` output is shown as is, followed by the same lines when
 it changed any skill.
 
-In a terminal the bar appears once the npm registry resolves (or `npx` prints anything): the first
-seven cells fill 150 ms apart, the eighth when `npx` starts printing, the ninth when every skill
-named with `-s` is on disk, the tenth when `npx` exits. In scripts and CI only the final line is
-printed. If `npx` fails, its full output is printed.
+In a terminal the bar appears empty once the npm registry resolves (or `npx` prints anything): the
+first seven cells fill on a timer, one every 150 ms, then the eighth when `npx` starts printing,
+the ninth when every skill named with `-s` is on disk, the tenth when `npx` exits. Every value
+stays on screen for at least 150 ms: one that arrives sooner waits, and the final line waits for
+the last one. In scripts and CI only the
+final line is printed. If `npx` fails, its full output is printed.
 
 ### Local skills
 
 `skl-x sln <path>` symlinks `<path>/skills/<name>` into `.agents/skills` and
 `.claude/skills`. The links point straight at the clone, so edits there show up without
 reinstalling. `<path>` may also be the skills folder itself, such as
-`../skills/plugins/devflow/skills`.
+`../skills/plugins/devflow/skills`. When neither holds skills, `sln` searches `<path>`: every
+`<name>/SKILL.md` whose frontmatter `name` is `<name>` is a skill, so in a plugin repo
+`sln ../skills -s tdd dashfix` links skills from two plugins
+(`plugins/devflow/skills/tdd`, `plugins/writing/skills/dashfix`). The search goes five folders
+deep, skips hidden folders (`.agents`, `.claude`, `.git`), `node_modules`, `dist`, `coverage` and
+symlinks, and does not look inside a skill. A name found in two folders exits 1.
 
 ```sh
 # Every skill in the clone
@@ -69,11 +76,11 @@ npx -y skl-x sln ../skills -s tdd cross-review -a claude-code
 ```
 
 ```text
-Symlinking 2 skills from ../skills ██████████ 100%
+Symlinking 2 skills from ../skills to Project scope ██████████ 100%
 skill         .agents    .claude    skills-lock.json  cost
 cross-review  symlinked  symlinked  -                 ~186 tok
 tdd           symlinked  symlinked  -                 ~125 tok
-Symlinked 2 skills · cross-review tdd
+Symlinked 2 skills to Project scope · cross-review tdd
 ```
 
 - Without `-s`, every `<path>/skills/<name>/SKILL.md` is linked (or `<path>/<name>/SKILL.md`
@@ -82,6 +89,8 @@ Symlinked 2 skills · cross-review tdd
 - An existing copy or symlink with the same name is replaced after a
   `Replace N existing skills?` prompt, or at once with `-y`.
 - `skills-lock.json` is not changed. Global scope (`-g`) is not supported yet.
+- In a terminal the bar fills one cell every 50 ms, about half a second in all; in scripts and
+  CI only the final line is printed.
 
 | Option | Description |
 |---|---|
@@ -94,8 +103,11 @@ Symlinked 2 skills · cross-review tdd
 | Mode | `add` | `sln` | `rm` |
 |---|---|---|---|
 | `lg` | `npx` output, then the `md` lines | as `md` | plan and summary |
-| `md` | progress line, table, `Installed N skills · <names>` | progress line, table, `Symlinked N skills · <names>` | `Executed A/B/C skills` |
-| `sm` | `Installed N skills · <names>` | `Symlinked N skills · <names>` | `Executed A/B/C skills` |
+| `md` | progress line, table, `Installed N skills to <scope> · <names>` | progress line, table, `Symlinked N skills to <scope> · <names>` | `Executed A/B/C skills from <scope>` |
+| `sm` | `Installed N skills to <scope> · <names>` | `Symlinked N skills to <scope> · <names>` | `Executed A/B/C skills from <scope>` |
+
+`<scope>` is `Project scope`, or `Global scope` with `-g`. In a terminal these lines are gray,
+except the green bar and the skill names (cyan).
 
 ## Cost
 
@@ -183,7 +195,7 @@ skl-x rm tdd                     # plan, Proceed? [y/n], then Clean lock? [y/n]
 skl-x rm .                       # every skill in scope
 skl-x rm . -x tdd cross-review   # every skill except the listed ones
 skl-x rm tdd -y                  # no prompts, no plan
-skl-x rm . -y -m sm              # one line: Executed A/B/C skills
+skl-x rm . -y -m sm              # one line: Executed A/B/C skills from Project scope
 skl-x rm tdd --lock-only         # also --agents-only, --claude-only
 skl-x rm tdd -g                  # global scope
 ```

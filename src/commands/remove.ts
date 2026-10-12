@@ -2,12 +2,12 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { defineCommand } from 'citty';
 import { countLockLinesToRemove, readLock, removeSkillFromLock } from '../lock/file';
-import { green, red, yellow } from '../utils/ansi';
+import { gray, green, red, yellow } from '../utils/ansi';
 import { createConfirmer } from '../utils/confirm';
 import { discoverSkills } from '../utils/discover-skills';
 import { countFoldersAndFiles, lstatOrNull, rmSkillDir } from '../utils/fs-rm';
 import { extractMode } from '../utils/mode';
-import { scopeLockPath } from '../utils/scope';
+import { scopeLabel, scopeLockPath } from '../utils/scope';
 
 type LocationKind = 'real' | 'symlink' | 'missing';
 
@@ -363,7 +363,8 @@ export const removeCommand = defineCommand({
       const agentsCount = removedFrom((t) => t.agents, scope === 'all' || scope === 'agents-only');
       const claudeCount = removedFrom((t) => t.claude, scope === 'all' || scope === 'claude-only');
       const lockCount = lockCleaned ? lockSkillsToRemove : 0;
-      console.log(`Executed ${agentsCount}/${claudeCount}/${lockCount} skills`);
+      const from = scopeLabel(isGlobal);
+      console.log(gray(`Executed ${agentsCount}/${claudeCount}/${lockCount} skills from ${from}`));
       return;
     }
     printBlock(

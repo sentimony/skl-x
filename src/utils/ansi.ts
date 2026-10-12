@@ -29,3 +29,7 @@ export function red(s: string): string {
 export function cyan(s: string): string {
   return enabled ? `\x1b[36m${s}\x1b[0m` : s;
 }
+
+export function gray(s: string): string {
+  return enabled ? `\x1b[90m${s}\x1b[0m` : s;
+}

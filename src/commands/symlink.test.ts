@@ -3,6 +3,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readlinkSync,
   realpathSync,
   rmSync,
@@ -201,8 +202,10 @@ describe('planSymlinks / runSymlink', () => {
       expect(readlinkSync(join(proj, dir, 'tdd'))).toBe('../../../clone/skills/tdd');
       expect(existsSync(join(proj, dir, ' scope-check'))).toBe(false);
     }
-    expect(console.log).toHaveBeenCalledWith('Symlinking 1 skill from ../clone ██████████ 100%');
-    expect(console.log).toHaveBeenCalledWith('Symlinked 1 skill · tdd');
+    expect(console.log).toHaveBeenCalledWith(
+      'Symlinking 1 skill from ../clone to Project scope ██████████ 100%',
+    );
+    expect(console.log).toHaveBeenCalledWith('Symlinked 1 skill to Project scope · tdd');
   });
 
   it('maps -a claude-code to .claude/skills only', async () => {
@@ -217,8 +220,12 @@ describe('planSymlinks / runSymlink', () => {
     expect(readlinkSync(join(proj, '.claude/skills/cross-review'))).toBe(
       '../../../clone/skills/cross-review',
     );
-    expect(console.log).toHaveBeenCalledWith('Symlinking 2 skills from ../clone ██████████ 100%');
-    expect(console.log).toHaveBeenCalledWith('Symlinked 2 skills · tdd cross-review');
+    expect(console.log).toHaveBeenCalledWith(
+      'Symlinking 2 skills from ../clone to Project scope ██████████ 100%',
+    );
+    expect(console.log).toHaveBeenCalledWith(
+      'Symlinked 2 skills to Project scope · tdd cross-review',
+    );
   });
 
   it('is idempotent: a second run without -y asks nothing', async () => {
@@ -252,7 +259,7 @@ describe('planSymlinks / runSymlink', () => {
     const lines = vi.mocked(console.log).mock.calls.map((c) => String(c[0]));
     const listed = lines.findIndex((l) => l.startsWith('.claude/skills/tdd - '));
     const done = lines.findIndex((l) =>
-      l.startsWith('Symlinking 1 skill from ../clone ██████████ 100%'),
+      l.startsWith('Symlinking 1 skill from ../clone to Project scope ██████████ 100%'),
     );
     expect(listed).toBeGreaterThanOrEqual(0);
     expect(done).toBeGreaterThan(listed);
@@ -375,8 +382,10 @@ describe('planSymlinks / runSymlink', () => {
 
   it('dedupes repeated names', async () => {
     expect(await runSymlink(['../clone', '-s', 'tdd', 'tdd', '-y'], { cwd: proj })).toBe(0);
-    expect(console.log).toHaveBeenCalledWith('Symlinking 1 skill from ../clone ██████████ 100%');
-    expect(console.log).toHaveBeenCalledWith('Symlinked 1 skill · tdd');
+    expect(console.log).toHaveBeenCalledWith(
+      'Symlinking 1 skill from ../clone to Project scope ██████████ 100%',
+    );
+    expect(console.log).toHaveBeenCalledWith('Symlinked 1 skill to Project scope · tdd');
   });
 
   it('returns 1 on argument errors', async () => {
@@ -415,8 +424,12 @@ describe('planSymlinks / runSymlink', () => {
       expect(existsSync(join(proj, dir, 'hidden'))).toBe(false);
       expect(existsSync(join(proj, dir, 'notes'))).toBe(false);
     }
-    expect(console.log).toHaveBeenCalledWith('Symlinking 2 skills from ../clone ██████████ 100%');
-    expect(console.log).toHaveBeenCalledWith('Symlinked 2 skills · cross-review tdd');
+    expect(console.log).toHaveBeenCalledWith(
+      'Symlinking 2 skills from ../clone to Project scope ██████████ 100%',
+    );
+    expect(console.log).toHaveBeenCalledWith(
+      'Symlinked 2 skills to Project scope · cross-review tdd',
+    );
     expect(console.log).toHaveBeenCalledWith(
       'skill         .agents    .claude    skills-lock.json  cost',
     );
@@ -495,17 +508,17 @@ describe('planSymlinks / runSymlink', () => {
         0,
       );
       expect(logged()).toEqual([
-        'Symlinking 1 skill from ../clone ██████████ 100%',
+        'Symlinking 1 skill from ../clone to Project scope ██████████ 100%',
         'skill  .agents    .claude    skills-lock.json  cost',
         'tdd    symlinked  symlinked  -                 ~4 tok',
-        'Symlinked 1 skill · tdd',
+        'Symlinked 1 skill to Project scope · tdd',
       ]);
     },
   );
 
   it('runSln --mode small prints the summary only and still links', async () => {
     expect(await runSln(['../clone', '--mode', 'small', '-y'], { cwd: proj })).toBe(0);
-    expect(logged()).toEqual(['Symlinked 2 skills · cross-review tdd']);
+    expect(logged()).toEqual(['Symlinked 2 skills to Project scope · cross-review tdd']);
     expect(lstatSync(join(proj, '.claude/skills/tdd')).isSymbolicLink()).toBe(true);
   });
 
@@ -531,7 +544,7 @@ describe('planSymlinks / runSymlink', () => {
     expect(await runSymlink(['../clone/skills', '-s', 'tdd', '-y'], { cwd: proj })).toBe(0);
     expect(readlinkSync(join(proj, '.agents/skills/tdd'))).toBe('../../../clone/skills/tdd');
     expect(console.log).toHaveBeenCalledWith(
-      'Symlinking 1 skill from ../clone/skills ██████████ 100%',
+      'Symlinking 1 skill from ../clone/skills to Project scope ██████████ 100%',
     );
     expect(await runSymlink(['../clone/skills', '-y'], { cwd: proj })).toBe(0);
     for (const dir of BOTH) {
@@ -560,5 +573,87 @@ describe('planSymlinks / runSymlink', () => {
       'skl sln: --reject: "nope" is not in ../clone/skills',
     );
     expect(existsSync(join(proj, '.agents'))).toBe(false);
+  });
+
+  describe('a repo without <path>/skills (recursive search)', () => {
+    let repo = '';
+    beforeEach(() => {
+      repo = join(tmp, 'repo');
+      seedSkill(join(repo, 'plugins/devflow'), 'tdd');
+      seedSkill(join(repo, 'plugins/devflow'), 'branch-finish');
+      seedSkill(join(repo, 'plugins/writing'), 'dashfix');
+      seedInternal(join(repo, 'plugins/writing'), 'hidden');
+      // a skills folder without SKILL.md files does not stop the search
+      mkdirSync(join(repo, 'skills/leftover'), { recursive: true });
+    });
+
+    it('finds -s skills in whichever folder holds them, skipping " name"', async () => {
+      expect(
+        await runSymlink(['../repo', '-s', 'branch-finish', 'dashfix', ' tdd', '-y'], {
+          cwd: proj,
+        }),
+      ).toBe(0);
+      expect(readlinkSync(join(proj, '.agents/skills/branch-finish'))).toBe(
+        '../../../repo/plugins/devflow/skills/branch-finish',
+      );
+      expect(readlinkSync(join(proj, '.claude/skills/dashfix'))).toBe(
+        '../../../repo/plugins/writing/skills/dashfix',
+      );
+      expect(existsSync(join(proj, '.agents/skills/tdd'))).toBe(false);
+      expect(console.log).toHaveBeenCalledWith(
+        'Symlinking 2 skills from ../repo to Project scope ██████████ 100%',
+      );
+    });
+
+    it('links every found skill without -s, except internal ones', async () => {
+      expect(await runSymlink(['../repo', '-x', 'tdd', '-y'], { cwd: proj })).toBe(0);
+      expect(readdirSync(join(proj, '.agents/skills')).sort()).toEqual([
+        'branch-finish',
+        'dashfix',
+      ]);
+    });
+
+    it('skips a SKILL.md named after another skill, and says so for -s', async () => {
+      mkdirSync(join(repo, 'misc/old-name'), { recursive: true });
+      writeFileSync(join(repo, 'misc/old-name/SKILL.md'), '---\nname: new-name\n---\n');
+      expect(await runSymlink(['../repo', '-s', 'old-name', '-y'], { cwd: proj })).toBe(1);
+      expect(console.error).toHaveBeenCalledWith(
+        'skl sln: ../repo/misc/old-name/SKILL.md is not named old-name in its frontmatter',
+      );
+      expect(await runSymlink(['../repo', '-s', 'nope', '-y'], { cwd: proj })).toBe(1);
+      expect(console.error).toHaveBeenCalledWith('skl sln: no nope/SKILL.md in ../repo');
+      expect(existsSync(join(proj, '.agents'))).toBe(false);
+      expect(await runSymlink(['../repo', '-y'], { cwd: proj })).toBe(0);
+      expect(existsSync(join(proj, '.agents/skills/old-name'))).toBe(false);
+    });
+
+    it('skips hidden folders, node_modules, symlinks, the inside of a skill and deep folders', async () => {
+      seedSkill(join(repo, '.agents'), 'copy');
+      seedSkill(join(repo, 'node_modules/pkg'), 'dep');
+      seedSkill(join(repo, 'tool'), 'kit');
+      // depth 5, inside the kit skill
+      seedSkill(join(repo, 'tool/skills/kit'), 'inner');
+      seedSkill(join(repo, 'a/b/c/d'), 'too-deep');
+      seedSkill(join(repo, 'a/b/c'), 'deep-enough');
+      symlinkSync(join(repo, 'plugins'), join(repo, 'loop'));
+      expect(await runSymlink(['../repo', '-y'], { cwd: proj })).toBe(0);
+      expect(readdirSync(join(proj, '.agents/skills')).sort()).toEqual([
+        'branch-finish',
+        'dashfix',
+        'deep-enough',
+        'kit',
+        'tdd',
+      ]);
+    });
+
+    it('refuses a skill that is in two folders', async () => {
+      seedSkill(join(repo, 'plugins/writing'), 'tdd');
+      expect(await runSymlink(['../repo', '-s', 'tdd', '-y'], { cwd: proj })).toBe(1);
+      expect(console.error).toHaveBeenCalledWith(
+        'skl sln: tdd is in more than one folder: ../repo/plugins/devflow/skills, ../repo/plugins/writing/skills',
+      );
+      // other skills still link
+      expect(await runSymlink(['../repo', '-s', 'dashfix', '-y'], { cwd: proj })).toBe(0);
+    });
   });
 });

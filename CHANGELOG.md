@@ -7,16 +7,29 @@
 - **Breaking:** output modes are `-m sm` / `--mode small`, `-m md` / `--mode medium` and
   `-m lg` / `--mode large` (default) in `add`, `sln` and `rm`. The 0.4.6 names exit 1 with a hint:
   `q`/`quiet` → `sm`, `s`/`silent` → `md`, `c`/`clear` → `lg`.
-- `add` and `sln` end with a summary line, `Installed N skills · <names>` or
-  `Symlinked N skills · <names>`; `sm` prints only that line (no `from <source>` any more).
-- The progress line names the count and drops the summary: `Installing 1 skill from <source>
-  ██████████ 100%`, `Symlinking 2 skills from <path> ██████████ 100%`.
-- `add` progress bar: it appears once `registry.npmjs.org` resolves or `npx` prints anything, fills
-  seven cells 150 ms apart, then the eighth when `npx` starts printing and the ninth when every
-  `-s` skill is on disk. Without `-s` it no longer shows a moving block.
+- `add` and `sln` end with a summary line, `Installed N skills to <scope> · <names>` or
+  `Symlinked N skills to <scope> · <names>`; `sm` prints only that line (no `from <source>` any
+  more). `<scope>` is `Project scope`, or `Global scope` with `-g`.
+- The progress line names the count and the scope and drops the summary: `Installing 1 skill
+  from <source> to Project scope ██████████ 100%`, `Symlinking 2 skills from <path> to Project
+  scope ██████████ 100%`.
+- `rm` in `md` and `sm` names the scope: `Executed A/B/C skills from Project scope`.
+- In a terminal the progress, summary and `Executed` lines are gray, except the green bar and
+  the skill names (cyan).
+- `add` progress bar: it appears empty once `registry.npmjs.org` resolves or `npx` prints anything,
+  fills seven cells on a timer, one every 150 ms, then the eighth when `npx` starts printing and
+  the ninth when every `-s` skill is on disk. Every value stays on screen for at least 150 ms.
+  Without `-s` it no longer shows a moving block.
 - `add` without `-m` (`lg`) prints the `md` lines after the `npx` output when a skill changed.
 - `sln` no longer logs each link as `path -> target` or the skipped skills; `lg` and `md` look the
   same.
+- `sln <path>` searches `<path>` when neither `<path>/skills` nor `<path>` holds skills: every
+  `<name>/SKILL.md` with `name: <name>` in its frontmatter is a skill, up to five folders deep,
+  skipping hidden folders, `node_modules`, `dist`, `coverage`, symlinks and the inside of a skill.
+  One command links skills from several plugins (`skl sln ../skills -s tdd dashfix`); a name
+  found in two folders exits 1.
+- `sln` progress bar: in a terminal it fills one cell every 50 ms (about 0.5 s) before the final
+  line.
 
 ## 0.4.7 (2026-10-10)
 

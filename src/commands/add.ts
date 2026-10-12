@@ -4,8 +4,10 @@ import { existsSync, lstatSync, readdirSync, readlinkSync, statSync } from 'node
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readLock } from '../lock/file';
+import { cyan, gray } from '../utils/ansi';
 import { extractMode } from '../utils/mode';
 import { createProgress, renderBar } from '../utils/progress';
+import { scopeLabel } from '../utils/scope';
 import { collectRows, renderSkillTable, type SkillRoots } from '../utils/skill-table';
 
 export interface SpawnOutcome {
@@ -95,16 +97,16 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
 
-// "Installed 2 skills · tdd vitest"; the last line of every mode
-export function summaryLine(verb: string, names: string[]): string {
-  const count = `${verb} ${plural(names.length, 'skill')}`;
-  return names.length === 0 ? count : `${count} · ${names.join(' ')}`;
+// "Installed 2 skills to Project scope · tdd vitest"; the last line of every mode
+export function summaryLine(verb: string, names: string[], scope: string): string {
+  const count = gray(`${verb} ${plural(names.length, 'skill')} to ${scope}`);
+  return names.length === 0 ? count : `${count} ${gray('·')} ${cyan(names.join(' '))}`;
 }
 
-// "Installing 2 skills from <source>"; without a count while the total is unknown
-function installingLabel(source: string, count: number | null): string {
+// "Installing 2 skills from <source> to Project scope"; without a count while the total is unknown
+function installingLabel(source: string, count: number | null, scope: string): string {
   const what = count === null ? 'Installing' : `Installing ${plural(count, 'skill')}`;
-  return source ? `${what} from ${source}` : what;
+  return `${source ? `${what} from ${source}` : what} to ${scope}`;
 }
 
 // One signature per skill name across both dirs and the lock; a reinstall changes the inode,
@@ -151,6 +153,7 @@ export function requestedSkills(args: string[]): string[] | null {
 }
 
 interface AddScope {
+  label: string;
   roots: SkillRoots;
   lockPath: string;
   lockLabel: string;
@@ -162,6 +165,7 @@ function addScope(args: string[], deps: AddDeps): AddScope {
   const home = deps.home ?? homedir();
   const base = isGlobal ? home : (deps.cwd ?? process.cwd());
   return {
+    label: scopeLabel(isGlobal),
     roots: { agents: join(base, '.agents', 'skills'), claude: join(base, '.claude', 'skills') },
     lockPath: isGlobal ? join(home, '.agents', '.skill-lock.json') : join(base, 'skills-lock.json'),
     lockLabel: isGlobal ? '.agents/.skill-lock.json' : 'skills-lock.json',
@@ -206,7 +210,7 @@ async function runMd(
 ): Promise<number> {
   const from = sourceLabel(args[0]);
   const requested = requestedSkills(args);
-  const progress = createProgress(installingLabel(from, requested?.length ?? null));
+  const progress = createProgress(installingLabel(from, requested?.length ?? null, scope.label));
   const before = snapshotSkills(scope.roots, scope.lockPath);
   let started = false;
   const tick = () => {
@@ -245,9 +249,9 @@ async function runMd(
     return reportCapturedFailure(r);
   }
   const changed = changedSince(scope, before);
-  progress.done(installingLabel(from, requested?.length ?? changed.length));
+  await progress.done(installingLabel(from, requested?.length ?? changed.length, scope.label));
   printTable(scope, changed);
-  console.log(summaryLine('Installed', changed));
+  console.log(summaryLine('Installed', changed, scope.label));
   return 0;
 }
 
@@ -268,9 +272,11 @@ async function runLg(args: string[], spawn: Spawner, scope: AddScope): Promise<n
     if (changed.length === 0) return 0;
     const requested = requestedSkills(args);
     const from = sourceLabel(args[0]);
-    console.log(`${installingLabel(from, requested?.length ?? changed.length)} ${renderBar(1)}`);
+    console.log(
+      `${gray(installingLabel(from, requested?.length ?? changed.length, scope.label))} ${renderBar(1)}`,
+    );
     printTable(scope, changed);
-    console.log(summaryLine('Installed', changed));
+    console.log(summaryLine('Installed', changed, scope.label));
   } catch {}
   return 0;
 }
@@ -279,7 +285,7 @@ async function runSm(args: string[], spawn: Spawner, scope: AddScope): Promise<n
   const before = snapshotSkills(scope.roots, scope.lockPath);
   const r = await spawn('npx', ['-y', 'skills', 'add', ...args], true);
   if (r.error || r.status !== 0) return reportCapturedFailure(r);
-  console.log(summaryLine('Installed', changedSince(scope, before)));
+  console.log(summaryLine('Installed', changedSince(scope, before), scope.label));
   return 0;
 }
 

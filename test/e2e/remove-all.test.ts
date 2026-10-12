@@ -195,7 +195,7 @@ describe('skl rm .', () => {
     mkdirSync(join(tmp, '.agents', 'skills', 'foo'), { recursive: true });
     const r = rmAll(['-y', '-m', 'sm']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe('Executed 1/3/3 skills\n');
+    expect(r.stdout).toBe('Executed 1/3/3 skills from Project scope\n');
     expect(existsSync(join(tmp, '.agents', 'skills', 'foo'))).toBe(false);
     expect(existsSync(join(tmp, '.claude', 'skills', 'foo'))).toBe(false);
     const lock = JSON.parse(readFileSync(join(tmp, 'skills-lock.json'), 'utf8'));
@@ -204,9 +204,9 @@ describe('skl rm .', () => {
 
   it('--mode small and --mode=sm are the long forms of -m sm', () => {
     seed3();
-    expect(rmAll(['--yes', '--mode', 'small']).stdout).toBe('Executed 0/3/3 skills\n');
+    expect(rmAll(['--yes', '--mode', 'small']).stdout).toBe('Executed 0/3/3 skills from Project scope\n');
     seed3();
-    expect(rmAll(['--yes', '--mode=sm']).stdout).toBe('Executed 0/3/3 skills\n');
+    expect(rmAll(['--yes', '--mode=sm']).stdout).toBe('Executed 0/3/3 skills from Project scope\n');
   });
 
   it('-m sm without -y keeps the plan and prompts, replaces only the summary', () => {
@@ -216,14 +216,14 @@ describe('skl rm .', () => {
     expect(r.stdout).toContain('will be removed from:');
     expect(r.stdout).toContain('Proceed?');
     expect(r.stdout).not.toContain('3 skills bar baz foo removed from:');
-    expect(r.stdout.trimEnd().endsWith('Executed 0/3/0 skills')).toBe(true);
+    expect(r.stdout.trimEnd().endsWith('Executed 0/3/0 skills from Project scope')).toBe(true);
   });
 
   it('-m sm with --lock-only reports 0 for untouched locations', () => {
     seed3();
     const r = rmAll(['--lock-only', '-y', '-m', 'sm']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe('Executed 0/0/3 skills\n');
+    expect(r.stdout).toBe('Executed 0/0/3 skills from Project scope\n');
     expect(existsSync(join(tmp, '.claude', 'skills', 'foo', 'SKILL.md'))).toBe(true);
   });
 
@@ -231,15 +231,15 @@ describe('skl rm .', () => {
     seed3();
     const r = rmAll(['-x', 'foo', '-m', 'sm', '-y']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe('Executed 0/2/2 skills\n');
+    expect(r.stdout).toBe('Executed 0/2/2 skills from Project scope\n');
     expect(existsSync(join(tmp, '.claude', 'skills', 'foo', 'SKILL.md'))).toBe(true);
   });
 
   it('-m md and --mode medium print the same Executed line as -m sm', () => {
     seed3();
-    expect(rmAll(['-y', '-m', 'md']).stdout).toBe('Executed 0/3/3 skills\n');
+    expect(rmAll(['-y', '-m', 'md']).stdout).toBe('Executed 0/3/3 skills from Project scope\n');
     seed3();
-    expect(rmAll(['-y', '--mode', 'medium']).stdout).toBe('Executed 0/3/3 skills\n');
+    expect(rmAll(['-y', '--mode', 'medium']).stdout).toBe('Executed 0/3/3 skills from Project scope\n');
   });
 
   it('-m lg prints the summary block as without -m', () => {

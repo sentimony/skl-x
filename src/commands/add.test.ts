@@ -10,7 +10,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { INTRO_CELLS, INTRO_STEP_MS } from '../utils/progress';
+import { setColorEnabled } from '../utils/ansi';
+import { FRAME_MS, INTRO_CELLS } from '../utils/progress';
 import {
   ADD_HELP,
   defaultSpawn,
@@ -20,6 +21,7 @@ import {
   type SpawnOutcome,
   snapshotSkills,
   sourceLabel,
+  summaryLine,
 } from './add';
 
 let tmp = '';
@@ -126,10 +128,10 @@ describe('runAdd - lg mode', () => {
       false,
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
-      'Installing 1 skill from https://github.com/sentimony/skills ██████████ 100%',
+      'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
       'skill         .agents    .claude    skills-lock.json  cost',
       'cross-review  universal  symlinked  +                 ~4 tok',
-      'Installed 1 skill · cross-review',
+      'Installed 1 skill to Project scope · cross-review',
     ]);
   });
 
@@ -195,10 +197,10 @@ describe('runAdd - md mode', () => {
       expect.any(Function),
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
-      'Installing 1 skill from https://github.com/sentimony/skills ██████████ 100%',
+      'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
       'skill         .agents    .claude    skills-lock.json  cost',
       'cross-review  universal  symlinked  +                 ~4 tok',
-      'Installed 1 skill · cross-review',
+      'Installed 1 skill to Project scope · cross-review',
     ]);
   });
 
@@ -218,7 +220,9 @@ describe('runAdd - md mode', () => {
     expect(await runAdd(['sentimony/skills', '-y', '-m', 'md'], { spawn, cwd: proj })).toBe(2);
     expect(out).toHaveBeenCalledWith('out');
     expect(err).toHaveBeenCalledWith('err');
-    expect(console.log).toHaveBeenCalledWith('Installing from https://github.com/sentimony/skills');
+    expect(console.log).toHaveBeenCalledWith(
+      'Installing from https://github.com/sentimony/skills to Project scope',
+    );
   });
 
   it('reports 0 skills without a table when nothing changed', async () => {
@@ -226,8 +230,8 @@ describe('runAdd - md mode', () => {
     const spawn = vi.fn(ok);
     expect(await runAdd(['sentimony/skills', '-y', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
-      'Installing 0 skills from https://github.com/sentimony/skills ██████████ 100%',
-      'Installed 0 skills',
+      'Installing 0 skills from https://github.com/sentimony/skills to Project scope ██████████ 100%',
+      'Installed 0 skills to Project scope',
     ]);
   });
 
@@ -248,9 +252,9 @@ describe('runAdd - md mode', () => {
     });
     expect(await runAdd(['sentimony/skills', '-y', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
     expect(console.log).toHaveBeenCalledWith(
-      'Installing 1 skill from https://github.com/sentimony/skills ██████████ 100%',
+      'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
     );
-    expect(console.log).toHaveBeenCalledWith('Installed 1 skill · tdd');
+    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
     expect(console.log).toHaveBeenCalledWith(
       'tdd    universal  symlinked  +                 ~1 tok',
     );
@@ -272,9 +276,9 @@ describe('runAdd - md mode', () => {
     ).toBe(0);
     const lines = vi.mocked(console.log).mock.calls.map((c) => String(c[0]));
     expect(lines).toContain(
-      'Installing 1 skill from https://github.com/sentimony/skills ██████████ 100%',
+      'Installing 1 skill from https://github.com/sentimony/skills to Global scope ██████████ 100%',
     );
-    expect(lines.at(-1)).toBe('Installed 1 skill · g1');
+    expect(lines.at(-1)).toBe('Installed 1 skill to Global scope · g1');
     expect(lines.some((l) => l.startsWith('skill') && l.includes('.agents/.skill-lock.json'))).toBe(
       true,
     );
@@ -291,15 +295,15 @@ describe('runAdd - md mode', () => {
       return ok();
     });
     expect(await runAdd(['sentimony/skills', '-y', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
-    expect(console.log).toHaveBeenCalledWith('Installed 1 skill · tdd');
+    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
   });
 
   it('drops "from <source>" when the first argument is a flag', async () => {
     const spawn = vi.fn(ok);
     expect(await runAdd(['-y', 'sentimony/skills', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
-      'Installing 0 skills ██████████ 100%',
-      'Installed 0 skills',
+      'Installing 0 skills to Project scope ██████████ 100%',
+      'Installed 0 skills to Project scope',
     ]);
   });
   it('awaits an async spawner', async () => {
@@ -310,7 +314,7 @@ describe('runAdd - md mode', () => {
     expect(
       await runAdd(['sentimony/skills', '-s', 'tdd', '-y', '-m', 'md'], { spawn, cwd: proj }),
     ).toBe(0);
-    expect(console.log).toHaveBeenCalledWith('Installed 1 skill · tdd');
+    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
   });
 
   it('shows the bar once online, fills the intro, then follows npx and the disk', async () => {
@@ -323,7 +327,7 @@ describe('runAdd - md mode', () => {
       return true;
     });
     const last = () => frames.at(-1)?.replace('\r\x1b[2K', '');
-    const label = 'Installing 2 skills from https://github.com/sentimony/skills';
+    const label = 'Installing 2 skills from https://github.com/sentimony/skills to Project scope';
     try {
       let finish: (r: SpawnOutcome) => void = () => {};
       let output: () => void = () => {};
@@ -343,17 +347,21 @@ describe('runAdd - md mode', () => {
       expect(frames).toEqual([]);
       online(true);
       await vi.advanceTimersByTimeAsync(0);
-      expect(last()).toBe(`${label} █░░░░░░░░░ 10%`);
-      await vi.advanceTimersByTimeAsync(INTRO_STEP_MS * (INTRO_CELLS - 1));
+      expect(last()).toBe(`${label} ░░░░░░░░░░ 0%`);
+      await vi.advanceTimersByTimeAsync(INTRO_CELLS * FRAME_MS);
       expect(last()).toBe(`${label} ███████░░░ 70%`);
       output();
       await vi.advanceTimersByTimeAsync(100);
+      expect(last()).toBe(`${label} ███████░░░ 70%`);
+      await vi.advanceTimersByTimeAsync(FRAME_MS - 100);
       expect(last()).toBe(`${label} ████████░░ 80%`);
       fakeInstall('a');
       fakeInstall('b');
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(FRAME_MS);
       expect(last()).toBe(`${label} █████████░ 90%`);
       finish(ok());
+      // 90% stays for its whole frame before the final line
+      await vi.advanceTimersByTimeAsync(FRAME_MS);
       expect(await run).toBe(0);
       expect(console.log).toHaveBeenCalledWith(`${label} ██████████ 100%`);
       const count = frames.length;
@@ -365,6 +373,18 @@ describe('runAdd - md mode', () => {
       else delete (process.stdout as { isTTY?: boolean }).isTTY;
       vi.useRealTimers();
     }
+  });
+});
+
+describe('summaryLine', () => {
+  afterEach(() => setColorEnabled(false));
+
+  it('names the scope, grays the words and paints the skill names cyan', () => {
+    expect(summaryLine('Installed', [], 'Global scope')).toBe('Installed 0 skills to Global scope');
+    setColorEnabled(true);
+    expect(summaryLine('Installed', ['tdd', 'vitest'], 'Project scope')).toBe(
+      '\x1b[90mInstalled 2 skills to Project scope\x1b[0m \x1b[90m·\x1b[0m \x1b[36mtdd vitest\x1b[0m',
+    );
   });
 });
 
@@ -434,7 +454,7 @@ describe('runAdd - sm mode', () => {
       true,
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
-      'Installed 1 skill · cross-review',
+      'Installed 1 skill to Project scope · cross-review',
     ]);
   });
 
@@ -443,7 +463,9 @@ describe('runAdd - sm mode', () => {
     expect(await runAdd(['-y', 'sentimony/skills', '--mode', 'small'], { spawn, cwd: proj })).toBe(
       0,
     );
-    expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual(['Installed 0 skills']);
+    expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
+      'Installed 0 skills to Project scope',
+    ]);
   });
 
   it('needs -y and does not spawn npx without it', async () => {
