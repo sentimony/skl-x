@@ -28,31 +28,41 @@ npx -y skl-x add sentimony/skills -l
 # Specific skills to specific agents, non-interactive
 npx -y skl-x add sentimony/skills -s tdd cross-review -a codex claude-code -y
 
-# Hide the npx skills output, print a progress line and a table (needs -y)
-npx -y skl-x add sentimony/skills -s tdd -a codex claude-code -y -m s
+# Hide the npx skills output, print a progress line, a table and a summary (needs -y)
+npx -y skl-x add sentimony/skills -s tdd -a codex claude-code -y -m md
 
-# One line only (needs -y)
-npx -y skl-x add sentimony/skills -s tdd -a codex claude-code -y -m q
+# The summary line only (needs -y)
+npx -y skl-x add sentimony/skills -s tdd -a codex claude-code -y -m sm
 ```
 
 ```text
-Installing from https://github.com/sentimony/skills ██████████ 100% · Installed 1 skill
+Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%
 skill  .agents    .claude    skills-lock.json  cost
 tdd    universal  symlinked  +                 ~125 tok
+Installed 1 skill to Project scope · tdd
 ```
 
-Without `-m`, the `npx skills add` output is shown as is, followed by the table of the skills it
-changed.
+Without `-m` (`lg`), the `npx skills add` output is shown as is, followed by the same lines when
+it changed any skill.
 
-In a terminal the bar fills while `npx` runs; in scripts and CI only the final line is printed.
-If `npx` fails, its full output is printed.
+In a terminal the bar appears empty once the npm registry resolves (or `npx` prints anything): the
+first seven cells fill on a timer, one every 150 ms, then the eighth when `npx` starts printing,
+the ninth when every skill named with `-s` is on disk, the tenth when `npx` exits. Every value
+stays on screen for at least 150 ms: one that arrives sooner waits, and the final line waits for
+the last one. In scripts and CI only the
+final line is printed. If `npx` fails, its full output is printed.
 
 ### Local skills
 
 `skl-x sln <path>` symlinks `<path>/skills/<name>` into `.agents/skills` and
 `.claude/skills`. The links point straight at the clone, so edits there show up without
 reinstalling. `<path>` may also be the skills folder itself, such as
-`../skills/plugins/devflow/skills`.
+`../skills/plugins/devflow/skills`. When neither holds skills, `sln` searches `<path>`: every
+`<name>/SKILL.md` whose frontmatter `name` is `<name>` is a skill, so in a plugin repo
+`sln ../skills -s tdd dashfix` links skills from two plugins
+(`plugins/devflow/skills/tdd`, `plugins/writing/skills/dashfix`). The search goes five folders
+deep, skips hidden folders (`.agents`, `.claude`, `.git`), `node_modules`, `dist`, `coverage` and
+symlinks, and does not look inside a skill. A name found in two folders exits 1.
 
 ```sh
 # Every skill in the clone
@@ -66,14 +76,11 @@ npx -y skl-x sln ../skills -s tdd cross-review -a claude-code
 ```
 
 ```text
-.agents/skills/cross-review -> ../../../skills/skills/cross-review
-.claude/skills/cross-review -> ../../../skills/skills/cross-review
-.agents/skills/tdd -> ../../../skills/skills/tdd
-.claude/skills/tdd -> ../../../skills/skills/tdd
-Symlinking from ../skills ██████████ 100% · Symlinked 2 skills
+Symlinking 2 skills from ../skills to Project scope ██████████ 100%
 skill         .agents    .claude    skills-lock.json  cost
 cross-review  symlinked  symlinked  -                 ~186 tok
 tdd           symlinked  symlinked  -                 ~125 tok
+Symlinked 2 skills to Project scope · cross-review tdd
 ```
 
 - Without `-s`, every `<path>/skills/<name>/SKILL.md` is linked (or `<path>/<name>/SKILL.md`
@@ -82,6 +89,8 @@ tdd           symlinked  symlinked  -                 ~125 tok
 - An existing copy or symlink with the same name is replaced after a
   `Replace N existing skills?` prompt, or at once with `-y`.
 - `skills-lock.json` is not changed. Global scope (`-g`) is not supported yet.
+- In a terminal the bar fills one cell every 50 ms, about half a second in all; in scripts and
+  CI only the final line is printed.
 
 | Option | Description |
 |---|---|
@@ -89,13 +98,16 @@ tdd           symlinked  symlinked  -                 ~125 tok
 | `--reject, -x <names...>` | Every skill except these (not with `-s`) |
 | `--agent, -a <agents...>` | `codex` (`.agents/skills`), `claude-code` (`.claude/skills`); default: both |
 | `--yes, -y` | Skip `npx` prompts (`add`); replace existing copies without asking (`sln`) |
-| `--mode, -m <mode>` | `clear` (`c`, default), `silent` (`s`), `quiet` (`q`); `silent` and `quiet` in `add` need `-y` |
+| `--mode, -m <mode>` | `lg` (`large`, default), `md` (`medium`), `sm` (`small`); `md` and `sm` in `add` need `-y` |
 
 | Mode | `add` | `sln` | `rm` |
 |---|---|---|---|
-| `clear` | `npx` output, then a table | `path -> target` per link, progress line, table | plan and summary |
-| `silent` | progress line and table | progress line and table | `Executed A/B/C skills` |
-| `quiet` | `Installed N skills from <source>` | `Symlinked N skills from <path>` | `Executed A/B/C skills` |
+| `lg` | `npx` output, then the `md` lines | as `md` | plan and summary |
+| `md` | progress line, table, `Installed N skills to <scope> · <names>` | progress line, table, `Symlinked N skills to <scope> · <names>` | `Executed A/B/C skills from <scope>` |
+| `sm` | `Installed N skills to <scope> · <names>` | `Symlinked N skills to <scope> · <names>` | `Executed A/B/C skills from <scope>` |
+
+`<scope>` is `Project scope`, or `Global scope` with `-g`. In a terminal these lines are gray,
+except the green bar and the skill names (cyan).
 
 ## Cost
 
@@ -183,7 +195,7 @@ skl-x rm tdd                     # plan, Proceed? [y/n], then Clean lock? [y/n]
 skl-x rm .                       # every skill in scope
 skl-x rm . -x tdd cross-review   # every skill except the listed ones
 skl-x rm tdd -y                  # no prompts, no plan
-skl-x rm . -y -m s               # one line: Executed A/B/C skills
+skl-x rm . -y -m sm              # one line: Executed A/B/C skills from Project scope
 skl-x rm tdd --lock-only         # also --agents-only, --claude-only
 skl-x rm tdd -g                  # global scope
 ```

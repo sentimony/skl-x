@@ -1,10 +1,13 @@
 import { spawn as spawnAsync, spawnSync } from 'node:child_process';
+import { lookup } from 'node:dns/promises';
 import { existsSync, lstatSync, readdirSync, readlinkSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readLock } from '../lock/file';
+import { cyan, gray } from '../utils/ansi';
 import { extractMode } from '../utils/mode';
-import { createProgress } from '../utils/progress';
+import { createProgress, renderBar } from '../utils/progress';
+import { scopeLabel } from '../utils/scope';
 import { collectRows, renderSkillTable, type SkillRoots } from '../utils/skill-table';
 
 export interface SpawnOutcome {
@@ -14,20 +17,30 @@ export interface SpawnOutcome {
   stderr?: string;
 }
 
+// onOutput: called on every captured chunk, so the caller sees when npx starts working
 export type Spawner = (
   command: string,
   args: string[],
   capture: boolean,
+  onOutput?: () => void,
 ) => SpawnOutcome | Promise<SpawnOutcome>;
 
 export interface AddDeps {
   spawn?: Spawner;
   cwd?: string;
   home?: string;
+  // resolves true once the npm registry resolves; the progress bar appears then
+  online?: () => Promise<boolean>;
 }
 
+const defaultOnline = () =>
+  lookup('registry.npmjs.org').then(
+    () => true,
+    () => false,
+  );
+
 // Node >= 20 refuses to spawn npx.cmd without a shell on Windows (EINVAL)
-export const defaultSpawn: Spawner = (command, args, capture) => {
+export const defaultSpawn: Spawner = (command, args, capture, onOutput) => {
   if (!capture) {
     const r = spawnSync(command, args, { stdio: 'inherit', shell: process.platform === 'win32' });
     return { status: r.status, error: r.error };
@@ -45,9 +58,11 @@ export const defaultSpawn: Spawner = (command, args, capture) => {
     child.stderr?.setEncoding('utf8');
     child.stdout?.on('data', (d) => {
       stdout += d;
+      onOutput?.();
     });
     child.stderr?.on('data', (d) => {
       stderr += d;
+      onOutput?.();
     });
     child.on('error', (error) => done({ status: null, error, stdout, stderr }));
     child.on('close', (status) => done({ status, stdout, stderr }));
@@ -64,21 +79,34 @@ export const ADD_HELP = [
   '',
   'OPTIONS',
   '',
-  '  -y, --yes           Skip npx prompts (needed by silent and quiet)',
-  '  -m, --mode          clear (c, default): the npx output, then a table of the changed skills',
-  '                      silent (s): a progress line and the table',
-  '                      quiet (q): one "Installed N skills from <source>" line',
+  '  -y, --yes           Skip npx prompts (needed by sm and md)',
+  '  -m, --mode          lg (large, default): the npx output, then the md output',
+  '                      md (medium): a progress line, a table of the changed skills and',
+  '                      an "Installed N skills · <names>" line',
+  '                      sm (small): the "Installed N skills · <names>" line only',
   '',
   'EXAMPLES',
   '',
   '  skl add sentimony/skills -l',
   '  skl add sentimony/skills -s cross-review tdd -a codex claude-code -y',
-  '  skl add sentimony/skills -s tdd -y -m s',
-  '  skl add sentimony/skills -s tdd -y -m q',
+  '  skl add sentimony/skills -s tdd -y -m md',
+  '  skl add sentimony/skills -s tdd -y -m sm',
 ].join('\n');
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
+// "Installed 2 skills to Project scope · tdd vitest"; the last line of every mode
+export function summaryLine(verb: string, names: string[], scope: string): string {
+  const count = gray(`${verb} ${plural(names.length, 'skill')} to ${scope}`);
+  return names.length === 0 ? count : `${count} ${gray('·')} ${cyan(names.join(' '))}`;
+}
+
+// "Installing 2 skills from <source> to Project scope"; without a count while the total is unknown
+function installingLabel(source: string, count: number | null, scope: string): string {
+  const what = count === null ? 'Installing' : `Installing ${plural(count, 'skill')}`;
+  return `${source ? `${what} from ${source}` : what} to ${scope}`;
 }
 
 // One signature per skill name across both dirs and the lock; a reinstall changes the inode,
@@ -125,6 +153,7 @@ export function requestedSkills(args: string[]): string[] | null {
 }
 
 interface AddScope {
+  label: string;
   roots: SkillRoots;
   lockPath: string;
   lockLabel: string;
@@ -136,6 +165,7 @@ function addScope(args: string[], deps: AddDeps): AddScope {
   const home = deps.home ?? homedir();
   const base = isGlobal ? home : (deps.cwd ?? process.cwd());
   return {
+    label: scopeLabel(isGlobal),
     roots: { agents: join(base, '.agents', 'skills'), claude: join(base, '.claude', 'skills') },
     lockPath: isGlobal ? join(home, '.agents', '.skill-lock.json') : join(base, 'skills-lock.json'),
     lockLabel: isGlobal ? '.agents/.skill-lock.json' : 'skills-lock.json',
@@ -168,26 +198,50 @@ function reportCapturedFailure(r: SpawnOutcome): number {
   return failedToRun(r) ? 1 : (r.status ?? 1);
 }
 
-async function runSilent(args: string[], spawn: Spawner, scope: AddScope): Promise<number> {
+// cells after the progress intro: the eighth once npx prints anything, the ninth when every
+// requested skill has changed; the tenth is only drawn by done()
+const STARTED = 1 / 3;
+
+async function runMd(
+  args: string[],
+  spawn: Spawner,
+  scope: AddScope,
+  online: () => Promise<boolean>,
+): Promise<number> {
   const from = sourceLabel(args[0]);
-  const progress = createProgress(from ? `Installing from ${from}` : 'Installing');
   const requested = requestedSkills(args);
+  const progress = createProgress(installingLabel(from, requested?.length ?? null, scope.label));
   const before = snapshotSkills(scope.roots, scope.lockPath);
+  let started = false;
   const tick = () => {
-    if (requested === null) return progress.update(null);
+    if (!started) return;
+    if (requested === null) return progress.update(STARTED);
     // npx may remove an entry between readdir and lstat; skip that frame
     try {
       const changed = new Set(changedSince(scope, before));
       const done = requested.filter((n) => changed.has(n)).length;
-      progress.update(Math.min(0.99, done / requested.length));
+      progress.update(Math.min(0.99, STARTED + ((1 - STARTED) * done) / requested.length));
     } catch {}
   };
-  tick();
+  // a finished run must not wait for the lookup
+  let finished = false;
+  if (process.stdout.isTTY)
+    void online().then((ok) => {
+      if (ok && !finished) progress.start();
+    });
+  const onOutput = () => {
+    if (started) return;
+    started = true;
+    // offline npx can still run from its cache; its first output shows the bar too
+    progress.start();
+    tick();
+  };
   const timer = setInterval(tick, 100);
   let r: SpawnOutcome;
   try {
-    r = await spawn('npx', ['-y', 'skills', 'add', ...args], true);
+    r = await spawn('npx', ['-y', 'skills', 'add', ...args], true, onOutput);
   } finally {
+    finished = true;
     clearInterval(timer);
   }
   if (r.error || r.status === null || r.status !== 0) {
@@ -195,14 +249,15 @@ async function runSilent(args: string[], spawn: Spawner, scope: AddScope): Promi
     return reportCapturedFailure(r);
   }
   const changed = changedSince(scope, before);
-  progress.done(`Installed ${plural(changed.length, 'skill')}`);
+  await progress.done(installingLabel(from, requested?.length ?? changed.length, scope.label));
   printTable(scope, changed);
+  console.log(summaryLine('Installed', changed, scope.label));
   return 0;
 }
 
-async function runClear(args: string[], spawn: Spawner, scope: AddScope): Promise<number> {
+async function runLg(args: string[], spawn: Spawner, scope: AddScope): Promise<number> {
   // the table is extra on top of the npx proxy: a broken lock or skill dir must not stop
-  // npx from running or turn its success into a crash, so it only drops the table
+  // npx from running or turn its success into a crash, so it only drops the md output
   let before: Map<string, string> | null = null;
   try {
     before = snapshotSkills(scope.roots, scope.lockPath);
@@ -212,18 +267,25 @@ async function runClear(args: string[], spawn: Spawner, scope: AddScope): Promis
   if (r.status !== 0) return r.status ?? 1;
   if (before === null) return 0;
   try {
-    printTable(scope, changedSince(scope, before));
+    const changed = changedSince(scope, before);
+    // e.g. -l: nothing installed, the npx output is all there is to show
+    if (changed.length === 0) return 0;
+    const requested = requestedSkills(args);
+    const from = sourceLabel(args[0]);
+    console.log(
+      `${gray(installingLabel(from, requested?.length ?? changed.length, scope.label))} ${renderBar(1)}`,
+    );
+    printTable(scope, changed);
+    console.log(summaryLine('Installed', changed, scope.label));
   } catch {}
   return 0;
 }
 
-async function runQuiet(args: string[], spawn: Spawner, scope: AddScope): Promise<number> {
+async function runSm(args: string[], spawn: Spawner, scope: AddScope): Promise<number> {
   const before = snapshotSkills(scope.roots, scope.lockPath);
   const r = await spawn('npx', ['-y', 'skills', 'add', ...args], true);
   if (r.error || r.status !== 0) return reportCapturedFailure(r);
-  const from = sourceLabel(args[0]);
-  const count = plural(changedSince(scope, before).length, 'skill');
-  console.log(from ? `Installed ${count} from ${from}` : `Installed ${count}`);
+  console.log(summaryLine('Installed', changedSince(scope, before), scope.label));
   return 0;
 }
 
@@ -249,7 +311,7 @@ export async function runAdd(argv: string[], deps: AddDeps = {}): Promise<number
     console.error('skl add: -ln/--link was removed in 0.4.6, use skl sln');
     return 1;
   }
-  if (mode.mode !== 'clear' && !args.includes('-y') && !args.includes('--yes')) {
+  if (mode.mode !== 'lg' && !args.includes('-y') && !args.includes('--yes')) {
     console.error(
       `skl add: --mode ${mode.mode} needs -y/--yes (npx skills add asks questions otherwise)`,
     );
@@ -257,7 +319,7 @@ export async function runAdd(argv: string[], deps: AddDeps = {}): Promise<number
   }
   const spawn = deps.spawn ?? defaultSpawn;
   const scope = addScope(args, deps);
-  if (mode.mode === 'silent') return runSilent(args, spawn, scope);
-  if (mode.mode === 'quiet') return runQuiet(args, spawn, scope);
-  return runClear(args, spawn, scope);
+  if (mode.mode === 'md') return runMd(args, spawn, scope, deps.online ?? defaultOnline);
+  if (mode.mode === 'sm') return runSm(args, spawn, scope);
+  return runLg(args, spawn, scope);
 }

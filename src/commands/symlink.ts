@@ -15,8 +15,10 @@ import { readLock } from '../lock/file';
 import { createConfirmer } from '../utils/confirm';
 import { extractMode, type OutputMode } from '../utils/mode';
 import { createProgress } from '../utils/progress';
+import { scopeLabel } from '../utils/scope';
 import { extractFrontmatter, parseSkillMeta } from '../utils/skill-files';
 import { collectRows, renderSkillTable } from '../utils/skill-table';
+import { summaryLine } from './add';
 
 export type Agent = 'codex' | 'claude-code';
 
@@ -26,6 +28,8 @@ export const AGENT_DIRS: Record<Agent, string> = {
 };
 
 const PREFIX = 'skl sln';
+// sln has no -g yet, so it always links into the project
+const SCOPE = scopeLabel(false);
 
 export interface SymlinkArgs {
   source: string;
@@ -239,20 +243,79 @@ function skillNames(dir: string): string[] {
     .sort();
 }
 
-// <source>/skills when it holds skills, else <source> itself when it is a skills folder
-// (e.g. plugins/<p>/skills); otherwise <source>/skills, so errors name the expected path
-export function skillsFolder(sourceAbs: string): string {
-  const nested = join(sourceAbs, 'skills');
-  if (skillNames(nested).length === 0 && skillNames(sourceAbs).length > 0) return sourceAbs;
-  return nested;
+// folders the recursive search never enters, besides hidden ones (installed copies in .agents, .claude)
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'coverage']);
+// a plugin skill sits at plugins/<p>/skills/<name>, four levels below the repo
+const MAX_DEPTH = 5;
+
+export interface FoundSkill {
+  name: string;
+  // the folder that holds <name>/SKILL.md
+  folder: string;
 }
 
-// Every <skills>/<name>/SKILL.md, sorted, with metadata.internal read from its frontmatter
-export function listCandidates(skillsAbs: string): { name: string; internal: boolean }[] {
-  return skillNames(skillsAbs).map((name) => {
-    const fm = extractFrontmatter(readFileSync(join(skillsAbs, name, 'SKILL.md'), 'utf8'));
-    return { name, internal: fm !== undefined && parseSkillMeta(fm).internal };
-  });
+export interface SourceSkills {
+  skills: FoundSkill[];
+  // folder name -> its SKILL.md, for a SKILL.md whose frontmatter names another skill
+  mismatched: Map<string, string>;
+  // the skills folder, or null when the skills were found by the recursive search
+  folder: string | null;
+}
+
+// the file's text, or undefined when it is missing or a folder
+function readIfFile(path: string): string | undefined {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
+// <dir>/SKILL.md below dir whose frontmatter name is <dir>; no symlinks, nothing inside a skill
+function walkSkills(dir: string, depth: number, out: SourceSkills): void {
+  const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  for (const entry of entries) {
+    // a Dirent of a symlink is not a directory, so links (and their cycles) are skipped
+    if (!entry.isDirectory() || entry.name.startsWith('.') || SKIP_DIRS.has(entry.name)) continue;
+    const child = join(dir, entry.name);
+    const md = join(child, 'SKILL.md');
+    // read without a stat first: a check before the read is a race (CodeQL js/file-system-race)
+    const text = readIfFile(md);
+    if (text !== undefined) {
+      const fm = extractFrontmatter(text);
+      if (fm !== undefined && parseSkillMeta(fm).name === entry.name)
+        out.skills.push({ name: entry.name, folder: dir });
+      else out.mismatched.set(entry.name, md);
+      continue;
+    }
+    if (depth < MAX_DEPTH) walkSkills(child, depth + 1, out);
+  }
+}
+
+// The skills of <source>: <source>/skills when it holds skills, else <source> itself when it is a
+// skills folder (e.g. plugins/<p>/skills), else the recursive search (a plugin repo such as
+// sentimony/skills); with nothing found, <source>/skills, so errors name the expected path
+export function findSkills(sourceAbs: string): SourceSkills {
+  const nested = join(sourceAbs, 'skills');
+  const direct = [nested, sourceAbs].find((f) => skillNames(f).length > 0);
+  if (direct === undefined) {
+    const found: SourceSkills = { skills: [], mismatched: new Map(), folder: null };
+    walkSkills(sourceAbs, 1, found);
+    if (found.skills.length > 0) return found;
+  }
+  const folder = direct ?? nested;
+  return {
+    skills: skillNames(folder).map((name) => ({ name, folder })),
+    mismatched: new Map(),
+    folder,
+  };
+}
+
+function isInternal(skillDir: string): boolean {
+  const fm = extractFrontmatter(readFileSync(join(skillDir, 'SKILL.md'), 'utf8'));
+  return fm !== undefined && parseSkillMeta(fm).internal;
 }
 
 export interface SymlinkDeps {
@@ -265,16 +328,11 @@ function describeExisting(step: SymlinkStep): string {
   return step.existing === 'symlink' ? `symlink -> ${step.existingTarget}` : step.existing;
 }
 
-function describeStep(step: SymlinkStep): string {
-  const link = `${step.dir}/${step.name} -> ${step.target}`;
-  if (step.action === 'replace') return `${link} (replaced ${describeExisting(step)})`;
-  if (step.action === 'same') return `${link} (unchanged)`;
-  return link;
-}
-
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
+
+export const SLN_FRAME_MS = 50;
 
 export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promise<number> {
   const parsed = parseSymlinkArgs(argv);
@@ -286,19 +344,29 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
   const cwd = deps.cwd ?? process.cwd();
   // createConfirmer, not confirm: on non-TTY stdin it reads to EOF and answers no instead of hanging
   const ask = deps.confirm ?? createConfirmer();
-  const mode = deps.mode ?? 'clear';
-  const skipped: string[] = [];
+  const mode = deps.mode ?? 'lg';
 
   const sourceAbs = resolve(cwd, source);
   if (!statSync(sourceAbs, { throwIfNoEntry: false })?.isDirectory()) {
     console.error(`${PREFIX}: ${source} is not a local directory`);
     return 1;
   }
-  const skillsAbs = skillsFolder(sourceAbs);
-  const skillsShown = skillsAbs === sourceAbs ? source : join(source, 'skills');
+  const found = findSkills(sourceAbs);
+  const skillsShown =
+    found.folder === null || found.folder === sourceAbs ? source : join(source, 'skills');
+  // the folder each skill name is linked from; a name found in two folders is ambiguous
+  const folderOf = new Map<string, string>();
+  const ambiguous = new Map<string, string[]>();
+  for (const { name, folder } of found.skills) {
+    const prev = folderOf.get(name);
+    if (prev !== undefined) ambiguous.set(name, [...(ambiguous.get(name) ?? [prev]), folder]);
+    else folderOf.set(name, folder);
+  }
   let names: string[];
   if (skills === null) {
-    const candidates = listCandidates(skillsAbs);
+    const candidates = found.skills
+      .map(({ name, folder }) => ({ name, internal: isInternal(join(folder, name)) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
     const known = new Set(candidates.map((c) => c.name));
     const unknown = rejects.filter((n) => !known.has(n));
     if (unknown.length > 0) {
@@ -307,30 +375,42 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
       return 1;
     }
     const rejected = new Set(rejects);
-    for (const c of candidates)
-      if (c.internal && !rejected.has(c.name)) skipped.push(`skip ${c.name} (metadata.internal)`);
-    for (const c of candidates) if (rejected.has(c.name)) skipped.push(`skip ${c.name} (-x)`);
     names = candidates.filter((c) => !c.internal && !rejected.has(c.name)).map((c) => c.name);
     if (names.length === 0) {
-      if (mode === 'clear') for (const line of skipped) console.log(line);
       console.log(`No skills to symlink in ${source}.`);
       return 0;
     }
   } else {
-    for (const n of skills)
-      if (n.startsWith(' ')) skipped.push(`skip ${n.trimStart()} (leading space)`);
     names = [...new Set(skills.filter((n) => !n.startsWith(' ')))];
-    const missing = names.filter((n) => !existsSync(join(skillsAbs, n, 'SKILL.md')));
+    const missing = names.filter((n) => !folderOf.has(n));
     if (missing.length > 0) {
-      for (const n of missing)
-        console.error(`${PREFIX}: ${join(skillsShown, n, 'SKILL.md')} not found`);
+      for (const n of missing) {
+        const md = found.mismatched.get(n);
+        if (md !== undefined)
+          console.error(`${PREFIX}: ${relative(cwd, md)} is not named ${n} in its frontmatter`);
+        else if (found.folder === null)
+          console.error(`${PREFIX}: no ${n}/SKILL.md in ${skillsShown}`);
+        else console.error(`${PREFIX}: ${join(skillsShown, n, 'SKILL.md')} not found`);
+      }
       return 1;
     }
   }
 
+  const clashes = names.filter((n) => ambiguous.has(n));
+  if (clashes.length > 0) {
+    for (const n of clashes) {
+      const where = (ambiguous.get(n) ?? []).map((f) => relative(cwd, f)).join(', ');
+      console.error(`${PREFIX}: ${n} is in more than one folder: ${where}`);
+    }
+    return 1;
+  }
   const dirs = agents.map((a) => AGENT_DIRS[a]);
-  const steps = planSymlinks({ cwd, skillsAbs, names, dirs });
-  const unsafe = overlapsSource(steps, skillsAbs, names);
+  // one group per skills folder: in a plugin repo each plugin has its own
+  const groups = [...new Set(folderOf.values())]
+    .map((f) => ({ skillsAbs: f, names: names.filter((n) => folderOf.get(n) === f) }))
+    .filter((g) => g.names.length > 0);
+  const steps = groups.flatMap((g) => planSymlinks({ cwd, ...g, dirs }));
+  const unsafe = [...new Set(groups.flatMap((g) => overlapsSource(steps, g.skillsAbs, g.names)))];
   if (unsafe.length > 0) {
     for (const s of unsafe)
       console.error(`${PREFIX}: ${s.dir}/${s.name} is the source itself, not replacing it`);
@@ -342,28 +422,31 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
     const count = new Set(replaced.map((s) => s.name)).size;
     if (!(await ask(`Replace ${plural(count, 'existing skill')}?`))) return 1;
   }
-  if (mode === 'clear') {
-    for (const line of skipped) console.log(line);
-    for (const s of steps) console.log(describeStep(s));
-  }
-  if (mode === 'quiet') {
-    applySymlinks(steps);
-    console.log(
-      names.length === 0
-        ? `No skills to symlink in ${source}.`
-        : `Symlinked ${plural(names.length, 'skill')} from ${source}`,
-    );
+  if (names.length === 0) {
+    console.log(`No skills to symlink in ${source}.`);
     return 0;
   }
-  // after the Replace prompt, so the bar never interleaves with it
-  const progress = createProgress(`Symlinking from ${source}`);
-  progress.update(0);
-  names.forEach((name, i) => {
-    applySymlinks(steps.filter((s) => s.name === name));
-    progress.update((i + 1) / names.length);
-  });
-  progress.done(`Symlinked ${plural(names.length, 'skill')}`);
-  if (names.length === 0) return 0;
+  if (mode === 'sm') {
+    applySymlinks(steps);
+    console.log(summaryLine('Symlinked', names, SCOPE));
+    return 0;
+  }
+  // md and lg look the same: each link as "path -> target" was more noise than detail.
+  // Linking takes milliseconds, so the bar just runs through its nine cells, SLN_FRAME_MS each
+  const progress = createProgress(
+    `Symlinking ${plural(names.length, 'skill')} from ${source} to ${SCOPE}`,
+    undefined,
+    { introCells: 9, frameMs: SLN_FRAME_MS },
+  );
+  progress.start();
+  try {
+    applySymlinks(steps);
+  } catch (e) {
+    progress.fail();
+    throw e;
+  }
+  await progress.filled();
+  await progress.done();
   const roots = {
     agents: join(cwd, AGENT_DIRS.codex),
     claude: join(cwd, AGENT_DIRS['claude-code']),
@@ -372,12 +455,15 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
   const rows = collectRows(names, roots, lockNames);
   for (const line of renderSkillTable(rows, { lockLabel: 'skills-lock.json', total: false }))
     console.log(line);
+  console.log(summaryLine('Symlinked', names, SCOPE));
   return 0;
 }
 
 export const SLN_HELP = [
   'Symlink <path>/skills/<name> into .agents/skills and .claude/skills; skills-lock.json is not changed.',
   '<path> may also be the skills folder itself (<path>/<name>/SKILL.md), e.g. plugins/<p>/skills.',
+  'Otherwise every <name>/SKILL.md below <path> named <name> in its frontmatter is a skill,',
+  'e.g. plugins/<p>/skills/<name> in a plugin repo (hidden folders and node_modules are skipped).',
   '',
   'USAGE skl-x sln <path> [-s <SKILL...> | -x <SKILL...>] [-a <AGENT...>] [-y] [-m <MODE>]',
   '',
@@ -387,16 +473,15 @@ export const SLN_HELP = [
   '  -x, --reject        Every skill except these',
   '  -a, --agent         codex (.agents/skills), claude-code (.claude/skills) (default: both)',
   '  -y, --yes           Replace existing copies without asking',
-  '  -m, --mode          clear (c, default): each link as "path -> target" and the skipped skills,',
-  '                      then a progress line and a table',
-  '                      silent (s): the progress line and the table',
-  '                      quiet (q): one "Symlinked N skills from <path>" line',
+  '  -m, --mode          md (medium), lg (large, default): a "Symlinking N skills from <path>" line,',
+  '                      a table and a "Symlinked N skills · <names>" line',
+  '                      sm (small): the "Symlinked N skills · <names>" line only',
   '',
   'EXAMPLES',
   '',
   '  skl sln ../skills -a codex claude-code -y',
   '  skl sln ../skills -x scope-check echarts -y',
-  '  skl sln ../skills -s tdd cross-review -a claude-code -m s',
+  '  skl sln ../skills -s tdd cross-review -a claude-code -m sm',
 ].join('\n');
 
 export async function runSln(argv: string[], deps: SymlinkDeps = {}): Promise<number> {

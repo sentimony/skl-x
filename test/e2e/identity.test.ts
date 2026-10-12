@@ -22,7 +22,7 @@ describe('skl-x identity', () => {
     const rm = run(['rm', '-h'], EMPTY).stdout;
     expect(rm).toContain('USAGE skl-x remove');
     expect(rm).not.toMatch(/skillio|sklx/);
-    expect(rm).toContain('silent (s), quiet (q)');
+    expect(rm).toContain('md (medium), sm (small)');
     const add = run(['add', '-h'], EMPTY).stdout;
     expect(add).toContain('USAGE skl-x add');
     expect(add).not.toMatch(/skillio|sklx/);

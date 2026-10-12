@@ -10,6 +10,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setColorEnabled } from '../utils/ansi';
+import { FRAME_MS, INTRO_CELLS } from '../utils/progress';
 import {
   ADD_HELP,
   defaultSpawn,
@@ -19,6 +21,7 @@ import {
   type SpawnOutcome,
   snapshotSkills,
   sourceLabel,
+  summaryLine,
 } from './add';
 
 let tmp = '';
@@ -56,7 +59,7 @@ afterEach(() => {
 
 const ok = (): SpawnOutcome => ({ status: 0, stdout: '', stderr: '' });
 
-describe('runAdd - clear mode', () => {
+describe('runAdd - lg mode', () => {
   it('passes args to npx skills add unchanged and in order, without capture', async () => {
     const spawn = vi.fn((_c: string, _a: string[], _capture: boolean) => ok());
     const status = await runAdd(
@@ -108,7 +111,7 @@ describe('runAdd - clear mode', () => {
     const spawn = vi.fn(ok);
     expect(await runAdd(['sentimony/skills', '-y', '-m', 'loud'], { spawn, cwd: proj })).toBe(1);
     expect(console.error).toHaveBeenCalledWith(
-      'skl add: unknown mode "loud", use clear (c), silent (s) or quiet (q)',
+      'skl add: unknown mode "loud", use sm (small), md (medium) or lg (large)',
     );
     expect(spawn).not.toHaveBeenCalled();
   });
@@ -125,8 +128,10 @@ describe('runAdd - clear mode', () => {
       false,
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
+      'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
       'skill         .agents    .claude    skills-lock.json  cost',
       'cross-review  universal  symlinked  +                 ~4 tok',
+      'Installed 1 skill to Project scope · cross-review',
     ]);
   });
 
@@ -163,14 +168,14 @@ describe('runAdd - clear mode', () => {
   });
 });
 
-describe('runAdd - silent mode', () => {
+describe('runAdd - md mode', () => {
   it('hides npx output, strips -m and prints a summary with a table', async () => {
     const spawn = vi.fn((_c: string, _a: string[], _capture: boolean) => {
       fakeInstall('cross-review');
       return { status: 0, stdout: 'NOISE', stderr: '' };
     });
     const status = await runAdd(
-      ['sentimony/skills', '-s', 'cross-review', '-a', 'codex', 'claude-code', '-y', '-m', 's'],
+      ['sentimony/skills', '-s', 'cross-review', '-a', 'codex', 'claude-code', '-y', '-m', 'md'],
       { spawn, cwd: proj },
     );
     expect(status).toBe(0);
@@ -189,19 +194,21 @@ describe('runAdd - silent mode', () => {
         '-y',
       ],
       true,
+      expect.any(Function),
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
-      'Installing from https://github.com/sentimony/skills ██████████ 100% · Installed 1 skill',
+      'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
       'skill         .agents    .claude    skills-lock.json  cost',
       'cross-review  universal  symlinked  +                 ~4 tok',
+      'Installed 1 skill to Project scope · cross-review',
     ]);
   });
 
   it('needs -y and does not spawn npx without it', async () => {
     const spawn = vi.fn(ok);
-    expect(await runAdd(['sentimony/skills', '--mode', 'silent'], { spawn, cwd: proj })).toBe(1);
+    expect(await runAdd(['sentimony/skills', '--mode', 'medium'], { spawn, cwd: proj })).toBe(1);
     expect(console.error).toHaveBeenCalledWith(
-      'skl add: --mode silent needs -y/--yes (npx skills add asks questions otherwise)',
+      'skl add: --mode md needs -y/--yes (npx skills add asks questions otherwise)',
     );
     expect(spawn).not.toHaveBeenCalled();
   });
@@ -210,18 +217,21 @@ describe('runAdd - silent mode', () => {
     const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const err = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const spawn = vi.fn(() => ({ status: 2, stdout: 'out', stderr: 'err' }));
-    expect(await runAdd(['sentimony/skills', '-y', '-m', 's'], { spawn, cwd: proj })).toBe(2);
+    expect(await runAdd(['sentimony/skills', '-y', '-m', 'md'], { spawn, cwd: proj })).toBe(2);
     expect(out).toHaveBeenCalledWith('out');
     expect(err).toHaveBeenCalledWith('err');
-    expect(console.log).toHaveBeenCalledWith('Installing from https://github.com/sentimony/skills');
+    expect(console.log).toHaveBeenCalledWith(
+      'Installing from https://github.com/sentimony/skills to Project scope',
+    );
   });
 
   it('reports 0 skills without a table when nothing changed', async () => {
     fakeInstall('tdd');
     const spawn = vi.fn(ok);
-    expect(await runAdd(['sentimony/skills', '-y', '-m', 's'], { spawn, cwd: proj })).toBe(0);
+    expect(await runAdd(['sentimony/skills', '-y', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
-      'Installing from https://github.com/sentimony/skills ██████████ 100% · Installed 0 skills',
+      'Installing 0 skills from https://github.com/sentimony/skills to Project scope ██████████ 100%',
+      'Installed 0 skills to Project scope',
     ]);
   });
 
@@ -240,10 +250,11 @@ describe('runAdd - silent mode', () => {
       fakeInstall('tdd');
       return ok();
     });
-    expect(await runAdd(['sentimony/skills', '-y', '-m', 's'], { spawn, cwd: proj })).toBe(0);
+    expect(await runAdd(['sentimony/skills', '-y', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
     expect(console.log).toHaveBeenCalledWith(
-      'Installing from https://github.com/sentimony/skills ██████████ 100% · Installed 1 skill',
+      'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
     );
+    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
     expect(console.log).toHaveBeenCalledWith(
       'tdd    universal  symlinked  +                 ~1 tok',
     );
@@ -261,12 +272,13 @@ describe('runAdd - silent mode', () => {
       return ok();
     });
     expect(
-      await runAdd(['sentimony/skills', '-g', '-y', '-m', 's'], { spawn, cwd: proj, home }),
+      await runAdd(['sentimony/skills', '-g', '-y', '-m', 'md'], { spawn, cwd: proj, home }),
     ).toBe(0);
     const lines = vi.mocked(console.log).mock.calls.map((c) => String(c[0]));
     expect(lines).toContain(
-      'Installing from https://github.com/sentimony/skills ██████████ 100% · Installed 1 skill',
+      'Installing 1 skill from https://github.com/sentimony/skills to Global scope ██████████ 100%',
     );
+    expect(lines.at(-1)).toBe('Installed 1 skill to Global scope · g1');
     expect(lines.some((l) => l.startsWith('skill') && l.includes('.agents/.skill-lock.json'))).toBe(
       true,
     );
@@ -282,17 +294,16 @@ describe('runAdd - silent mode', () => {
       );
       return ok();
     });
-    expect(await runAdd(['sentimony/skills', '-y', '-m', 's'], { spawn, cwd: proj })).toBe(0);
-    expect(console.log).toHaveBeenCalledWith(
-      'Installing from https://github.com/sentimony/skills ██████████ 100% · Installed 1 skill',
-    );
+    expect(await runAdd(['sentimony/skills', '-y', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
+    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
   });
 
   it('drops "from <source>" when the first argument is a flag', async () => {
     const spawn = vi.fn(ok);
-    expect(await runAdd(['-y', 'sentimony/skills', '-m', 's'], { spawn, cwd: proj })).toBe(0);
+    expect(await runAdd(['-y', 'sentimony/skills', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
-      'Installing ██████████ 100% · Installed 0 skills',
+      'Installing 0 skills to Project scope ██████████ 100%',
+      'Installed 0 skills to Project scope',
     ]);
   });
   it('awaits an async spawner', async () => {
@@ -301,14 +312,12 @@ describe('runAdd - silent mode', () => {
       return ok();
     });
     expect(
-      await runAdd(['sentimony/skills', '-s', 'tdd', '-y', '-m', 's'], { spawn, cwd: proj }),
+      await runAdd(['sentimony/skills', '-s', 'tdd', '-y', '-m', 'md'], { spawn, cwd: proj }),
     ).toBe(0);
-    expect(console.log).toHaveBeenCalledWith(
-      'Installing from https://github.com/sentimony/skills ██████████ 100% · Installed 1 skill',
-    );
+    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
   });
 
-  it('polls the disk every 100 ms, stays below 100% until npx exits and stops polling after', async () => {
+  it('shows the bar once online, fills the intro, then follows npx and the disk', async () => {
     vi.useFakeTimers();
     const tty = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
     Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
@@ -317,29 +326,44 @@ describe('runAdd - silent mode', () => {
       frames.push(String(s));
       return true;
     });
+    const last = () => frames.at(-1)?.replace('\r\x1b[2K', '');
+    const label = 'Installing 2 skills from https://github.com/sentimony/skills to Project scope';
     try {
       let finish: (r: SpawnOutcome) => void = () => {};
+      let output: () => void = () => {};
       const spawn = vi.fn(
-        () =>
+        (_c: string, _a: string[], _capture: boolean, onOutput?: () => void) =>
           new Promise<SpawnOutcome>((done) => {
             finish = done;
+            output = onOutput ?? (() => {});
           }),
       );
-      const run = runAdd(['sentimony/skills', '-s', 'a', 'b', '-y', '-m', 's'], {
+      let online: (ok: boolean) => void = () => {};
+      const run = runAdd(['sentimony/skills', '-s', 'a', 'b', '-y', '-m', 'md'], {
         spawn,
         cwd: proj,
+        online: () => new Promise((done) => (online = done)),
       });
-      expect(frames.at(-1)).toBe(
-        '\r\x1b[2KInstalling from https://github.com/sentimony/skills ░░░░░░░░░░ 0%',
-      );
+      expect(frames).toEqual([]);
+      online(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(last()).toBe(`${label} ░░░░░░░░░░ 0%`);
+      await vi.advanceTimersByTimeAsync(INTRO_CELLS * FRAME_MS);
+      expect(last()).toBe(`${label} ███████░░░ 70%`);
+      output();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(last()).toBe(`${label} ███████░░░ 70%`);
+      await vi.advanceTimersByTimeAsync(FRAME_MS - 100);
+      expect(last()).toBe(`${label} ████████░░ 80%`);
       fakeInstall('a');
       fakeInstall('b');
-      await vi.advanceTimersByTimeAsync(100);
-      expect(frames.at(-1)).toBe(
-        '\r\x1b[2KInstalling from https://github.com/sentimony/skills █████████░ 99%',
-      );
+      await vi.advanceTimersByTimeAsync(FRAME_MS);
+      expect(last()).toBe(`${label} █████████░ 90%`);
       finish(ok());
+      // 90% stays for its whole frame before the final line
+      await vi.advanceTimersByTimeAsync(FRAME_MS);
       expect(await run).toBe(0);
+      expect(console.log).toHaveBeenCalledWith(`${label} ██████████ 100%`);
       const count = frames.length;
       await vi.advanceTimersByTimeAsync(500);
       expect(frames.length).toBe(count);
@@ -349,6 +373,18 @@ describe('runAdd - silent mode', () => {
       else delete (process.stdout as { isTTY?: boolean }).isTTY;
       vi.useRealTimers();
     }
+  });
+});
+
+describe('summaryLine', () => {
+  afterEach(() => setColorEnabled(false));
+
+  it('names the scope, grays the words and paints the skill names cyan', () => {
+    expect(summaryLine('Installed', [], 'Global scope')).toBe('Installed 0 skills to Global scope');
+    setColorEnabled(true);
+    expect(summaryLine('Installed', ['tdd', 'vitest'], 'Project scope')).toBe(
+      '\x1b[90mInstalled 2 skills to Project scope\x1b[0m \x1b[90m·\x1b[0m \x1b[36mtdd vitest\x1b[0m',
+    );
   });
 });
 
@@ -389,7 +425,7 @@ describe('runAdd - removed -ln', () => {
   it.each([
     [['-ln', '../clone', '-y']],
     [['../clone', '--link']],
-    [['../clone', '-ln', '-y', '-m', 's']],
+    [['../clone', '-ln', '-y', '-m', 'md']],
   ])('%j exits 1 with use skl sln and does not spawn npx', async (argv) => {
     const spawn = vi.fn(ok);
     expect(await runAdd(argv, { spawn, cwd: proj })).toBe(1);
@@ -400,14 +436,14 @@ describe('runAdd - removed -ln', () => {
   });
 });
 
-describe('runAdd - quiet mode', () => {
-  it('prints one line with the source and hides the npx output', async () => {
+describe('runAdd - sm mode', () => {
+  it('prints one summary line and hides the npx output', async () => {
     const spawn = vi.fn((_c: string, _a: string[], _capture: boolean) => {
       fakeInstall('cross-review');
       return { status: 0, stdout: 'NOISE', stderr: '' };
     });
     expect(
-      await runAdd(['sentimony/skills', '-s', 'cross-review', '-y', '-m', 'q'], {
+      await runAdd(['sentimony/skills', '-s', 'cross-review', '-y', '-m', 'sm'], {
         spawn,
         cwd: proj,
       }),
@@ -418,23 +454,25 @@ describe('runAdd - quiet mode', () => {
       true,
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
-      'Installed 1 skill from https://github.com/sentimony/skills',
+      'Installed 1 skill to Project scope · cross-review',
     ]);
   });
 
-  it('drops "from <source>" when the first argument is a flag', async () => {
+  it('prints the count alone when nothing changed', async () => {
     const spawn = vi.fn(ok);
-    expect(await runAdd(['-y', 'sentimony/skills', '--mode', 'quiet'], { spawn, cwd: proj })).toBe(
+    expect(await runAdd(['-y', 'sentimony/skills', '--mode', 'small'], { spawn, cwd: proj })).toBe(
       0,
     );
-    expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual(['Installed 0 skills']);
+    expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
+      'Installed 0 skills to Project scope',
+    ]);
   });
 
   it('needs -y and does not spawn npx without it', async () => {
     const spawn = vi.fn(ok);
-    expect(await runAdd(['sentimony/skills', '-m', 'q'], { spawn, cwd: proj })).toBe(1);
+    expect(await runAdd(['sentimony/skills', '-m', 'sm'], { spawn, cwd: proj })).toBe(1);
     expect(console.error).toHaveBeenCalledWith(
-      'skl add: --mode quiet needs -y/--yes (npx skills add asks questions otherwise)',
+      'skl add: --mode sm needs -y/--yes (npx skills add asks questions otherwise)',
     );
     expect(spawn).not.toHaveBeenCalled();
   });
@@ -443,7 +481,7 @@ describe('runAdd - quiet mode', () => {
     const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const err = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const spawn = vi.fn(() => ({ status: 2, stdout: 'out', stderr: 'err' }));
-    expect(await runAdd(['sentimony/skills', '-y', '-m', 'q'], { spawn, cwd: proj })).toBe(2);
+    expect(await runAdd(['sentimony/skills', '-y', '-m', 'sm'], { spawn, cwd: proj })).toBe(2);
     expect(out).toHaveBeenCalledWith('out');
     expect(err).toHaveBeenCalledWith('err');
     expect(console.log).not.toHaveBeenCalled();

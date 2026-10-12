@@ -16,14 +16,13 @@ describe.skipIf(!process.env.SKL_X_E2E_NETWORK)('skl add (network)', () => {
 
   it('installs cross-review from sentimony/skills for codex and claude-code', () => {
     const { stdout, stderr, exitCode } = run(
-      ['add', 'sentimony/skills', '-s', 'cross-review', '-a', 'codex', 'claude-code', '-y', '-m', 's'],
+      ['add', 'sentimony/skills', '-s', 'cross-review', '-a', 'codex', 'claude-code', '-y', '-m', 'md'],
       proj,
     );
     expect(exitCode, stdout + stderr).toBe(0);
     const lines = stdout.trimEnd().split('\n');
-    expect(lines[0]).toBe(
-      'Installing from https://github.com/sentimony/skills ██████████ 100% · Installed 1 skill',
-    );
+    expect(lines[0]).toBe('Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%');
+    expect(lines.at(-1)).toBe('Installed 1 skill to Project scope · cross-review');
     expect(lines[2]).toMatch(/^cross-review {2}universal {2}symlinked {2}\+ +~\d+ tok$/);
     expect(existsSync(join(proj, '.agents/skills/cross-review/SKILL.md'))).toBe(true);
     expect(lstatSync(join(proj, '.claude/skills/cross-review')).isSymbolicLink()).toBe(true);

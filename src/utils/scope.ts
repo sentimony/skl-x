@@ -3,8 +3,12 @@ import { dirname, join } from 'node:path';
 import { getLockPath } from '../lock/file';
 import { bold } from './ansi';
 
+export function scopeLabel(isGlobal: boolean): string {
+  return isGlobal ? 'Global scope' : 'Project scope';
+}
+
 export function scopeHeader(isGlobal: boolean): string {
-  return bold(isGlobal ? 'Global scope' : 'Project scope');
+  return bold(scopeLabel(isGlobal));
 }
 
 // Nearest ancestor of cwd (inclusive) with .git (dir or file), else cwd itself
