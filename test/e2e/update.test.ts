@@ -25,6 +25,25 @@ describe('skl update', () => {
   });
 });
 
+describe('skl uninstall', () => {
+  it('from a local copy exits 1 and removes nothing', () => {
+    const r = run(['uninstall', '-y']);
+    expect(r.exitCode).toBe(1);
+    expect(r.stdout).toBe('');
+    expect(r.stderr).toContain(`skl-x runs from ${process.cwd()}, not from a global npm install`);
+  });
+
+  it('-h prints the usage', () => {
+    const r = run(['uninstall', '-h']);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain('USAGE skl-x uninstall [-y]');
+  });
+
+  it('is listed in the root help', () => {
+    expect(run(['-h']).stdout).toContain('uninstall        Remove the global skl-x');
+  });
+});
+
 describe('skl update and the update notice', () => {
   let home = '';
   beforeEach(() => {

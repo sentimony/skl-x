@@ -75,15 +75,31 @@ describe('runUpdate', () => {
     expect(d.saved).toEqual([]);
   });
 
-  it('under npx installs nothing and asks no registry', async () => {
-    const latest = vi.fn(async () => '0.4.11');
-    const d = deps({ install: () => 'npx', latest });
+  it('under npx installs nothing and names the running version', async () => {
+    const d = deps({ install: () => 'npx', version: '0.4.11' });
     expect(await runUpdate([], d.deps)).toBe(0);
     expect(out).toEqual([
-      'skl-x runs through npx, which takes the latest version: npx -y --prefer-online skl-x',
+      'skl-x 0.4.11 runs through npx, which takes the latest version: npx -y --prefer-online skl-x',
     ]);
-    expect(latest).not.toHaveBeenCalled();
     expect(d.calls).toEqual([]);
+    expect(d.saved).toEqual([]);
+  });
+
+  it('under npx with an older cached copy names both versions', async () => {
+    const d = deps({ install: () => 'npx' });
+    expect(await runUpdate([], d.deps)).toBe(0);
+    expect(out).toEqual([
+      'skl-x 0.4.10 runs through npx; the latest is 0.4.11: npx -y --prefer-online skl-x',
+    ]);
+    expect(d.calls).toEqual([]);
+  });
+
+  it('under npx without the registry names the running version only', async () => {
+    const d = deps({ install: () => 'npx', latest: async () => undefined });
+    expect(await runUpdate([], d.deps)).toBe(0);
+    expect(out).toEqual([
+      'skl-x 0.4.10 runs through npx, which takes the latest version: npx -y --prefer-online skl-x',
+    ]);
   });
 
   it('from a local copy exits 1, names its folder and asks no registry', async () => {

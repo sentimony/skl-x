@@ -10,6 +10,11 @@ import {
 import { defaultSpawn, type Spawner } from './add';
 
 const PREFIX = 'skl update';
+const NPX_LATEST = 'npx -y --prefer-online skl-x';
+
+export function localCopyMessage(cliPath: string): string {
+  return `skl-x runs from ${dirname(dirname(realOrSelf(cliPath)))}, not from a global npm install`;
+}
 
 export interface UpdateDeps {
   version: string;
@@ -44,19 +49,20 @@ export async function runUpdate(argv: string[], deps: UpdateDeps): Promise<numbe
   }
   const cliPath = deps.cliPath ?? process.argv[1] ?? '';
   const install = (deps.install ?? (() => detectInstall(cliPath)))();
-  if (install === 'npx') {
-    console.log(
-      'skl-x runs through npx, which takes the latest version: npx -y --prefer-online skl-x',
-    );
-    return 0;
-  }
   if (install === 'local') {
-    console.error(
-      `${PREFIX}: skl-x runs from ${dirname(dirname(realOrSelf(cliPath)))}, not from a global npm install; update that copy by hand`,
-    );
+    console.error(`${PREFIX}: ${localCopyMessage(cliPath)}; update that copy by hand`);
     return 1;
   }
   const latest = await (deps.latest ?? fetchLatest)();
+  if (install === 'npx') {
+    // without --prefer-online npx may run an older copy from its cache
+    console.log(
+      latest && compareVersions(latest, deps.version) > 0
+        ? `skl-x ${deps.version} runs through npx; the latest is ${latest}: ${NPX_LATEST}`
+        : `skl-x ${deps.version} runs through npx, which takes the latest version: ${NPX_LATEST}`,
+    );
+    return 0;
+  }
   if (!latest) {
     console.error(`${PREFIX}: could not get the latest version from registry.npmjs.org`);
     return 1;
