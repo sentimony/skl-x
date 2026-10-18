@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.12 (2026-10-19)
+
+### Added
+
+- `skl uninstall` removes the global skl-x: it asks `Remove skl-x X.Y.Z from the global npm
+  install? [y/n]` (`-y` skips the question), runs `npm uninstall -g skl-x`, removes the update-check
+  cache `~/.cache/skl-x/version.json` and prints `skl-x X.Y.Z removed.` with a reminder that a
+  completion script in a shell rc file stays. Skills are not touched. Under `npx` it removes
+  nothing (exit 0), and a local copy exits 1 with its folder. No alias: `rm` removes skills.
+
+### Changed
+
+- `skl update` under `npx` names the version that runs (`skl-x 0.4.12 runs through npx, ...`), and
+  both versions when npx ran an older copy from its cache.
+
 ## 0.4.11 (2026-10-18)
 
 ### Added

@@ -8,7 +8,7 @@ _skl_x_completions() {
   cur="\${COMP_WORDS[COMP_CWORD]}"
   prev="\${COMP_WORDS[COMP_CWORD-1]}"
 
-  local cmds="list ls remove rm cost cst usage usg completion add sln update up"
+  local cmds="list ls remove rm cost cst usage usg completion add sln update up uninstall"
   if [ "\${COMP_CWORD}" -eq 1 ]; then
     COMPREPLY=( $(compgen -W "\${cmds} -h --help -v --version" -- "\${cur}") )
     return 0
@@ -82,6 +82,7 @@ _skl_x() {
     'sln:Symlink skills from a local clone'
     'update:Install the latest skl-x globally'
     'up:Alias for update'
+    'uninstall:Remove the global skl-x'
   )
   if (( CURRENT == 2 )); then
     _describe 'command' cmds
@@ -171,8 +172,8 @@ function __skl_x_using_subcommand
   test "$cmd[2]" = "$argv[1]"
 end
 
-complete -c skl -n __skl_x_needs_command -a 'list ls remove rm cost cst usage usg completion add sln update up'
-complete -c skl-x -n __skl_x_needs_command -a 'list ls remove rm cost cst usage usg completion add sln update up'
+complete -c skl -n __skl_x_needs_command -a 'list ls remove rm cost cst usage usg completion add sln update up uninstall'
+complete -c skl-x -n __skl_x_needs_command -a 'list ls remove rm cost cst usage usg completion add sln update up uninstall'
 
 for sub in rm remove
   complete -c skl -n "__skl_x_using_subcommand $sub" -f -a '(__skl_x_skill_names)'
