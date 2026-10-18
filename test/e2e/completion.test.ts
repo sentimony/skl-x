@@ -37,7 +37,7 @@ describe('skl completion', () => {
 
   it('completes commands and add, sln, rm flags in every shell', () => {
     const bash = run(['completion', 'bash'], process.cwd()).stdout;
-    expect(bash).toContain('local cmds="list ls remove rm cost cst usage usg completion add sln"');
+    expect(bash).toContain('local cmds="list ls remove rm cost cst usage usg completion add sln update up"');
     expect(bash).toContain('    add)');
     expect(bash).toContain('    sln)');
     expect(bash).toContain('"-s --skill -a --agent -y --yes -m --mode -h --help"');
@@ -51,7 +51,7 @@ describe('skl completion', () => {
     expect(zsh.split("_values 'mode' sm md lg").length - 1).toBe(3);
     expect(zsh).not.toMatch(/install|-ln|--link|symlink:|stealth|-sm\[|'cs:|'us:/);
     const fish = run(['completion', 'fish'], process.cwd()).stdout;
-    expect(fish).toContain("-a 'list ls remove rm cost cst usage usg completion add sln'");
+    expect(fish).toContain("-a 'list ls remove rm cost cst usage usg completion add sln update up'");
     expect(fish).toContain("-s a -l agent -xa 'codex claude-code'");
     expect(fish.split("-s m -l mode -xa 'sm md lg'").length - 1).toBe(3);
     expect(fish).not.toMatch(/install|-o ln|--link|symlink sym sl|stealth/);

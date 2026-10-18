@@ -7,6 +7,7 @@ import { costCommand } from './commands/cost';
 import { listCommand } from './commands/list';
 import { removeCommand } from './commands/remove';
 import { runSln } from './commands/symlink';
+import { runUpdate } from './commands/update';
 import { usageCommand } from './commands/usage';
 import { detectColorSupport, setColorEnabled } from './utils/ansi';
 import { maybePrintUpdateNotice } from './utils/update-check';
@@ -69,8 +70,9 @@ function reorderRootFlagsToSubcommand(argv: string[]): string[] {
 // add and sln take raw argv: mergeAgentArgs would join -a values with \x1f and citty
 // cannot hold several -s values. Only -g/--global may precede them, so an option value
 // such as `--since add` never turns into a command; these names stay out of SUBCOMMAND_NAMES
-// for the same reason. install and i are here only to point at add and sln.
-const RAW_COMMANDS = new Set(['add', 'sln', 'install', 'i']);
+// for the same reason. install and i are here only to point at add and sln. update and up
+// skip the update notice, so they are raw too.
+const RAW_COMMANDS = new Set(['add', 'sln', 'install', 'i', 'update', 'up']);
 
 function detectRawCommand(argv: string[]): { command: string; args: string[] } | null {
   const tail = argv.slice(2);
@@ -106,6 +108,7 @@ function printRootHelp(): void {
     '  usage, usg       Show skill usage × cost (consumption) with missed rows',
     '  add              Install skills via `npx skills add`',
     '  sln              Symlink skills from a local clone into .agents/skills and .claude/skills',
+    '  update, up       Install the latest skl-x globally (npm i -g)',
     '  completion       Print shell completion script (bash, zsh, fish)',
   ];
   console.log(lines.join('\n'));
@@ -239,6 +242,8 @@ const main = defineCommand({
       process.exit(1);
     }
     setColorEnabled(detectColorSupport());
+    if (raw.command === 'update' || raw.command === 'up')
+      process.exit(await runUpdate(raw.args, { version }));
     await maybePrintUpdateNotice(version);
     process.exit(raw.command === 'sln' ? await runSln(raw.args) : await runAdd(raw.args));
   }

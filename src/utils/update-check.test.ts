@@ -1,8 +1,14 @@
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { compareVersions, getCachePath, readCache, writeCache } from './update-check';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  compareVersions,
+  detectInstall,
+  getCachePath,
+  readCache,
+  writeCache,
+} from './update-check';
 
 describe('compareVersions', () => {
   it('detects patch bump', () => expect(compareVersions('0.1.5', '0.1.4')).toBeGreaterThan(0));
@@ -43,5 +49,50 @@ describe('cache read/write', () => {
     writeCache({ checkedAt: 1, latest: 'x' }, path);
     require('node:fs').writeFileSync(path, '{not json');
     expect(readCache(path)).toBeUndefined();
+  });
+});
+
+describe('detectInstall', () => {
+  let TMP = '';
+  beforeEach(() => {
+    TMP = realpathSync(mkdtempSync(join(tmpdir(), 'skl-x-di-')));
+  });
+  afterEach(() => rmSync(TMP, { recursive: true, force: true }));
+
+  function seedCli(dir: string): string {
+    mkdirSync(join(dir, 'dist'), { recursive: true });
+    writeFileSync(join(dir, 'dist', 'cli.js'), '');
+    return join(dir, 'dist', 'cli.js');
+  }
+
+  it('is global for <npm root -g>/skl-x, also through the bin symlink', () => {
+    const root = join(TMP, 'lib', 'node_modules');
+    const cli = seedCli(join(root, 'skl-x'));
+    mkdirSync(join(TMP, 'bin'));
+    symlinkSync(cli, join(TMP, 'bin', 'skl'));
+    expect(detectInstall(cli, () => root)).toBe('global');
+    expect(detectInstall(join(TMP, 'bin', 'skl'), () => root)).toBe('global');
+  });
+
+  it('is npx under a _npx folder and does not ask npm for the global root', () => {
+    const cli = seedCli(join(TMP, '_npx', 'abc', 'node_modules', 'skl-x'));
+    const globalRoot = vi.fn(() => join(TMP, 'lib', 'node_modules'));
+    expect(detectInstall(cli, globalRoot)).toBe('npx');
+    expect(globalRoot).not.toHaveBeenCalled();
+  });
+
+  it('is local for a project dependency, a clone, or an unknown global root', () => {
+    const root = join(TMP, 'lib', 'node_modules');
+    seedCli(join(root, 'skl-x'));
+    const dep = seedCli(join(TMP, 'project', 'node_modules', 'skl-x'));
+    const clone = seedCli(join(TMP, 'skl-x'));
+    expect(detectInstall(dep, () => root)).toBe('local');
+    expect(detectInstall(clone, () => root)).toBe('local');
+    expect(detectInstall(clone, () => undefined)).toBe('local');
+  });
+
+  it('is local for a sibling package whose name starts with skl-x', () => {
+    const root = join(TMP, 'lib', 'node_modules');
+    expect(detectInstall(seedCli(join(root, 'skl-x-fork')), () => root)).toBe('local');
   });
 });

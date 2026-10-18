@@ -172,6 +172,7 @@ is no longer installed is shown in red with `~? tok`.
 |---|---|---|
 | `skl-x list` | `ls` | Table of skills: `.agents`, `.claude`, lock and cost per skill |
 | `skl-x remove` | `rm` | Remove skills from disk and `skills-lock.json` |
+| `skl-x update` | `up` | Install the latest skl-x globally (`npm i -g`); only a global npm install |
 | `skl-x completion` | | Print a shell completion script |
 
 `skl-x` with no command opens a menu in a terminal and prints `cost` otherwise.
@@ -235,6 +236,7 @@ skl-x completion fish > ~/.config/fish/completions/skl.fish
 
 ```sh
 npm i -g skl-x    # provides `skl-x` and the short `skl`
+skl update        # later: install the latest version globally (alias `skl up`)
 ```
 
 Moving from `@sentimony/sklx` or `skillio`: all three packages install the `skl` bin, so
