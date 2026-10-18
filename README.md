@@ -52,6 +52,10 @@ stays on screen for at least 150 ms: one that arrives sooner waits, and the fina
 the last one. In scripts and CI only the
 final line is printed. If `npx` fails, its full output is printed.
 
+`npx skills add` replaces a skill only in the dirs of `-a`. After it succeeds, `add` removes what
+is left of each added skill in the other agent dir, such as a `skl sln` link or a copy for the
+other agent, as `skl rm` before the install would. The target of a removed link is not touched.
+
 ### Local skills
 
 `skl-x sln <path>` symlinks `<path>/skills/<name>` into `.agents/skills` and
@@ -63,6 +67,11 @@ reinstalling. `<path>` may also be the skills folder itself, such as
 (`plugins/devflow/skills/tdd`, `plugins/writing/skills/dashfix`). The search goes five folders
 deep, skips hidden folders (`.agents`, `.claude`, `.git`), `node_modules`, `dist`, `coverage` and
 symlinks, and does not look inside a skill. A name found in two folders exits 1.
+
+Before linking, `sln` removes each selected skill the way `skl rm` does: a copy or another link in
+the agent dir outside `-a` and its `skills-lock.json` entry, which would otherwise bring a copy
+back over the link on the next `add`. Without `-y` it lists these with the replaced copies and
+asks once.
 
 ```sh
 # Every skill in the clone
@@ -97,7 +106,7 @@ Symlinked 2 skills to Project scope · cross-review tdd
 | `--skill, -s <names...>` | Only these skills; a name starting with a space is skipped |
 | `--reject, -x <names...>` | Every skill except these (not with `-s`) |
 | `--agent, -a <agents...>` | `codex` (`.agents/skills`), `claude-code` (`.claude/skills`); default: both |
-| `--yes, -y` | Skip `npx` prompts (`add`); replace existing copies without asking (`sln`) |
+| `--yes, -y` | Skip `npx` prompts (`add`); replace and remove existing copies and lock entries without asking (`sln`) |
 | `--mode, -m <mode>` | `lg` (`large`, default), `md` (`medium`), `sm` (`small`); `md` and `sm` in `add` need `-y` |
 
 | Mode | `add` | `sln` | `rm` |

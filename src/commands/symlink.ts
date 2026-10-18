@@ -11,8 +11,9 @@ import {
   symlinkSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
-import { readLock } from '../lock/file';
+import { readLock, removeSkillFromLock } from '../lock/file';
 import { createConfirmer } from '../utils/confirm';
+import { rmSkillDir } from '../utils/fs-rm';
 import { extractMode, type OutputMode } from '../utils/mode';
 import { createProgress } from '../utils/progress';
 import { scopeLabel } from '../utils/scope';
@@ -184,6 +185,50 @@ export function planSymlinks(opts: {
   return steps;
 }
 
+export interface StaleEntry {
+  dir: string;
+  name: string;
+  linkPath: string;
+  existing: Existing;
+  existingTarget?: string;
+}
+
+// Entries of the selected skills in agent dirs outside -a, which skl rm would remove too:
+// a copy left there shadows the link for that agent. An entry that is physically one of the
+// planned links (.claude/skills -> .agents/skills) is not stale
+export function planRemovals(opts: {
+  cwd: string;
+  names: string[];
+  dirs: string[];
+  steps: SymlinkStep[];
+}): StaleEntry[] {
+  const linked = new Set(
+    opts.steps.map((s) => join(physicalPath(dirname(s.linkPath)), basename(s.linkPath))),
+  );
+  const out: StaleEntry[] = [];
+  for (const name of opts.names) {
+    for (const dir of Object.values(AGENT_DIRS)) {
+      if (opts.dirs.includes(dir)) continue;
+      const dirAbs = join(opts.cwd, dir);
+      if (linked.has(join(physicalPath(dirAbs), name))) continue;
+      const linkPath = join(dirAbs, name);
+      // lstat: a dangling symlink is stale too
+      const stat = lstatSync(linkPath, { throwIfNoEntry: false });
+      if (!stat) continue;
+      if (stat.isSymbolicLink())
+        out.push({
+          dir,
+          name,
+          linkPath,
+          existing: 'symlink',
+          existingTarget: readlinkSync(linkPath),
+        });
+      else out.push({ dir, name, linkPath, existing: stat.isDirectory() ? 'folder' : 'file' });
+    }
+  }
+  return out;
+}
+
 // Collect every directory entry (physical parent + name) that resolving p walks through,
 // following symlinks segment by segment, so an entry reached via any alias is seen
 function walkEntries(p: string, out: Set<string>, depth = 0): string {
@@ -209,20 +254,18 @@ function walkEntries(p: string, out: Set<string>, depth = 0): string {
   return cur;
 }
 
-// A replace deletes the existing entry; refuse when resolving the source of any selected skill
-// walks through it: the entry itself (e.g. `skl sln .agents -s tdd` over a symlink, also via an
-// alias of .agents, would become a self-link) or a replaced folder that holds the source
-export function overlapsSource(
-  steps: SymlinkStep[],
+// A replace or a removal deletes the existing entry; refuse when resolving the source of any
+// selected skill walks through it: the entry itself (e.g. `skl sln .agents -s tdd` over a symlink,
+// also via an alias of .agents, would become a self-link) or a deleted folder that holds the source
+export function overlapsSource<T extends { linkPath: string }>(
+  deleted: T[],
   skillsAbs: string,
   names: string[],
-): SymlinkStep[] {
+): T[] {
   const walked = new Set<string>();
   for (const n of names) walkEntries(join(skillsAbs, n), walked);
-  return steps.filter(
-    (s) =>
-      s.action === 'replace' &&
-      walked.has(join(physicalPath(dirname(s.linkPath)), basename(s.linkPath))),
+  return deleted.filter((s) =>
+    walked.has(join(physicalPath(dirname(s.linkPath)), basename(s.linkPath))),
   );
 }
 
@@ -324,7 +367,7 @@ export interface SymlinkDeps {
   mode?: OutputMode;
 }
 
-function describeExisting(step: SymlinkStep): string {
+function describeExisting(step: { existing: Existing; existingTarget?: string }): string {
   return step.existing === 'symlink' ? `symlink -> ${step.existingTarget}` : step.existing;
 }
 
@@ -410,24 +453,36 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
     .map((f) => ({ skillsAbs: f, names: names.filter((n) => folderOf.get(n) === f) }))
     .filter((g) => g.names.length > 0);
   const steps = groups.flatMap((g) => planSymlinks({ cwd, ...g, dirs }));
-  const unsafe = [...new Set(groups.flatMap((g) => overlapsSource(steps, g.skillsAbs, g.names)))];
+  const removals = planRemovals({ cwd, names, dirs, steps });
+  const replaced = steps.filter((s) => s.action === 'replace');
+  const deleted = [...replaced, ...removals];
+  const unsafe = [...new Set(groups.flatMap((g) => overlapsSource(deleted, g.skillsAbs, g.names)))];
   if (unsafe.length > 0) {
     for (const s of unsafe)
       console.error(`${PREFIX}: ${s.dir}/${s.name} is the source itself, not replacing it`);
     return 1;
   }
-  const replaced = steps.filter((s) => s.action === 'replace');
-  if (replaced.length > 0 && !yes) {
-    for (const s of replaced) console.log(`${s.dir}/${s.name} - ${describeExisting(s)}`);
-    const count = new Set(replaced.map((s) => s.name)).size;
+  // a lock entry would bring a copy back over the link on the next add or update
+  const lockPath = join(cwd, 'skills-lock.json');
+  const inLock = Object.keys(readLock(lockPath).skills);
+  const lockHits = names.filter((n) => inLock.includes(n));
+  if ((deleted.length > 0 || lockHits.length > 0) && !yes) {
+    for (const s of deleted) console.log(`${s.dir}/${s.name} - ${describeExisting(s)}`);
+    for (const n of lockHits) console.log(`skills-lock.json - ${n}`);
+    const count = new Set([...deleted.map((s) => s.name), ...lockHits]).size;
     if (!(await ask(`Replace ${plural(count, 'existing skill')}?`))) return 1;
   }
+  const apply = () => {
+    for (const r of removals) rmSkillDir(r.linkPath, { allowedRoots: [cwd] });
+    for (const n of lockHits) removeSkillFromLock(lockPath, n);
+    applySymlinks(steps);
+  };
   if (names.length === 0) {
     console.log(`No skills to symlink in ${source}.`);
     return 0;
   }
   if (mode === 'sm') {
-    applySymlinks(steps);
+    apply();
     console.log(summaryLine('Symlinked', names, SCOPE));
     return 0;
   }
@@ -440,7 +495,7 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
   );
   progress.start();
   try {
-    applySymlinks(steps);
+    apply();
   } catch (e) {
     progress.fail();
     throw e;
@@ -451,7 +506,7 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
     agents: join(cwd, AGENT_DIRS.codex),
     claude: join(cwd, AGENT_DIRS['claude-code']),
   };
-  const lockNames = new Set(Object.keys(readLock(join(cwd, 'skills-lock.json')).skills));
+  const lockNames = new Set(Object.keys(readLock(lockPath).skills));
   const rows = collectRows(names, roots, lockNames);
   for (const line of renderSkillTable(rows, { lockLabel: 'skills-lock.json', total: false }))
     console.log(line);
@@ -460,7 +515,8 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
 }
 
 export const SLN_HELP = [
-  'Symlink <path>/skills/<name> into .agents/skills and .claude/skills; skills-lock.json is not changed.',
+  'Symlink <path>/skills/<name> into .agents/skills and .claude/skills. Like skl rm, it first',
+  'removes the skill from the other agent dir and from skills-lock.json.',
   '<path> may also be the skills folder itself (<path>/<name>/SKILL.md), e.g. plugins/<p>/skills.',
   'Otherwise every <name>/SKILL.md below <path> named <name> in its frontmatter is a skill,',
   'e.g. plugins/<p>/skills/<name> in a plugin repo (hidden folders and node_modules are skipped).',
@@ -472,7 +528,7 @@ export const SLN_HELP = [
   '  -s, --skill         Skill names (default: every skill except metadata.internal)',
   '  -x, --reject        Every skill except these',
   '  -a, --agent         codex (.agents/skills), claude-code (.claude/skills) (default: both)',
-  '  -y, --yes           Replace existing copies without asking',
+  '  -y, --yes           Replace and remove existing copies without asking',
   '  -m, --mode          md (medium), lg (large, default): a "Symlinking N skills from <path>" line,',
   '                      a table and a "Symlinked N skills · <names>" line',
   '                      sm (small): the "Symlinked N skills · <names>" line only',

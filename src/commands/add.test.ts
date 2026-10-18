@@ -1,6 +1,10 @@
 import {
+  existsSync,
+  lstatSync,
+  lutimesSync,
   mkdirSync,
   mkdtempSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -532,5 +536,88 @@ describe('defaultSpawn - capture', () => {
     const r = await defaultSpawn(process.execPath, ['-e', script], true);
     expect(r.status).toBe(0);
     expect(r.stdout).toBe('█\n');
+  });
+});
+
+describe('runAdd - entries npx left behind', () => {
+  const agents = (name: string) => join(proj, '.agents', 'skills', name);
+  const claude = (name: string) => join(proj, '.claude', 'skills', name);
+  // a skl sln link into a clone outside the project, with an old mtime so a reinstall stands out
+  function slnLink(path: string, name: string): string {
+    const target = join(tmp, 'clone', 'skills', name);
+    mkdirSync(target, { recursive: true });
+    writeFileSync(join(target, 'SKILL.md'), `---\nname: ${name}\n---\n`);
+    mkdirSync(join(path, '..'), { recursive: true });
+    symlinkSync(target, path);
+    lutimesSync(path, new Date(0), new Date(0));
+    return target;
+  }
+  // what `npx skills add … -a codex` writes: a copy in .agents/skills and the lock entry
+  function installCodex(name: string): void {
+    rmSync(agents(name), { recursive: true, force: true });
+    mkdirSync(agents(name), { recursive: true });
+    writeFileSync(join(agents(name), 'SKILL.md'), `---\nname: ${name}\n---\n`);
+    writeFileSync(
+      join(proj, 'skills-lock.json'),
+      JSON.stringify({ skills: { [name]: { source: 'x' } } }),
+    );
+  }
+
+  it.each([[[]], [['-m', 'md']], [['-m', 'sm']]])(
+    '%j removes a symlink outside -a and keeps its target',
+    async (mode) => {
+      const target = slnLink(claude('tdd'), 'tdd');
+      const spawn = vi.fn(() => {
+        installCodex('tdd');
+        return ok();
+      });
+      const args = ['sentimony/skills', '-s', 'tdd', '-a', 'codex', '-y', ...mode];
+      expect(await runAdd(args, { spawn, cwd: proj })).toBe(0);
+      expect(lstatSync(agents('tdd')).isDirectory()).toBe(true);
+      expect(lstatSync(claude('tdd'), { throwIfNoEntry: false })).toBeUndefined();
+      expect(existsSync(join(target, 'SKILL.md'))).toBe(true);
+    },
+  );
+
+  it('removes a .claude link into .agents that npx did not rewrite, without -s', async () => {
+    mkdirSync(agents('tdd'), { recursive: true });
+    mkdirSync(join(proj, '.claude', 'skills'), { recursive: true });
+    symlinkSync('../../.agents/skills/tdd', claude('tdd'));
+    lutimesSync(claude('tdd'), new Date(0), new Date(0));
+    const spawn = vi.fn(() => {
+      installCodex('tdd');
+      return ok();
+    });
+    expect(await runAdd(['sentimony/skills', '-y', '-m', 'sm'], { spawn, cwd: proj })).toBe(0);
+    expect(lstatSync(claude('tdd'), { throwIfNoEntry: false })).toBeUndefined();
+    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
+  });
+
+  it('keeps the entries npx rewrote and the skills it did not install', async () => {
+    slnLink(agents('tdd'), 'tdd');
+    slnLink(claude('tdd'), 'tdd');
+    slnLink(claude('vitest'), 'vitest');
+    const spawn = vi.fn(() => {
+      installCodex('tdd');
+      rmSync(claude('tdd'));
+      symlinkSync('../../.agents/skills/tdd', claude('tdd'));
+      return ok();
+    });
+    const args = ['sentimony/skills', '-s', 'tdd', '-a', 'codex', 'claude-code', '-y', '-m', 'sm'];
+    expect(await runAdd(args, { spawn, cwd: proj })).toBe(0);
+    expect(lstatSync(agents('tdd')).isDirectory()).toBe(true);
+    expect(readlinkSync(claude('tdd'))).toBe('../../.agents/skills/tdd');
+    expect(lstatSync(claude('vitest')).isSymbolicLink()).toBe(true);
+  });
+
+  it('leaves everything in place when npx fails', async () => {
+    slnLink(claude('tdd'), 'tdd');
+    const spawn = vi.fn(() => {
+      installCodex('tdd');
+      return { status: 1, stdout: '', stderr: 'boom' };
+    });
+    const args = ['sentimony/skills', '-s', 'tdd', '-a', 'codex', '-y', '-m', 'sm'];
+    expect(await runAdd(args, { spawn, cwd: proj })).toBe(1);
+    expect(lstatSync(claude('tdd')).isSymbolicLink()).toBe(true);
   });
 });

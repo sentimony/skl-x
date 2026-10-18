@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readLock } from '../lock/file';
 import { cyan, gray } from '../utils/ansi';
+import { rmSkillDir } from '../utils/fs-rm';
 import { extractMode } from '../utils/mode';
 import { createProgress, renderBar } from '../utils/progress';
 import { scopeLabel } from '../utils/scope';
@@ -75,7 +76,8 @@ export const ADD_HELP = [
   'USAGE skl-x add <source> [OPTIONS]',
   '',
   'Every argument except -m/--mode is passed to `npx skills add` unchanged;',
-  'see `npx skills add --help`.',
+  'see `npx skills add --help`. Then, as skl rm beforehand would, it removes what npx',
+  'left of each added skill in the other agent dir (e.g. a skl sln link).',
   '',
   'OPTIONS',
   '',
@@ -133,6 +135,35 @@ export function snapshotSkills(roots: SkillRoots, lockPath: string): Map<string,
   return new Map([...parts].map(([name, p]) => [name, p.join('|')]));
 }
 
+// lstat only, per entry: SKILL.md behind a .claude link into .agents changes with .agents
+function entrySignatures(roots: SkillRoots): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const root of [roots.agents, roots.claude]) {
+    if (!existsSync(root)) continue;
+    for (const name of readdirSync(root)) {
+      const dir = join(root, name);
+      const l = lstatSync(dir, { bigint: true });
+      out.set(dir, `${l.ino}:${l.mtimeNs}:${l.isSymbolicLink() ? readlinkSync(dir) : ''}`);
+    }
+  }
+  return out;
+}
+
+// npx rewrites a skill only in the dirs of -a; an entry of an installed skill it left as it was
+// (a skl sln link, a copy for another agent) is removed, as skl rm before the install would.
+// After the install, not before: a failed or skipped install keeps the old skill
+function removeLeftovers(scope: AddScope, before: Map<string, string>, installed: string[]): void {
+  const now = entrySignatures(scope.roots);
+  for (const name of installed) {
+    for (const root of [scope.roots.agents, scope.roots.claude]) {
+      const dir = join(root, name);
+      const was = before.get(dir);
+      if (was !== undefined && now.get(dir) === was)
+        rmSkillDir(dir, { allowedRoots: [scope.base] });
+    }
+  }
+}
+
 // `owner/repo` is the GitHub shorthand of `npx skills add`; URLs, paths and deeper paths stay as given
 export function sourceLabel(first: string | undefined): string {
   if (first === undefined || first.startsWith('-')) return '';
@@ -153,6 +184,7 @@ export function requestedSkills(args: string[]): string[] | null {
 }
 
 interface AddScope {
+  base: string;
   label: string;
   roots: SkillRoots;
   lockPath: string;
@@ -165,6 +197,7 @@ function addScope(args: string[], deps: AddDeps): AddScope {
   const home = deps.home ?? homedir();
   const base = isGlobal ? home : (deps.cwd ?? process.cwd());
   return {
+    base,
     label: scopeLabel(isGlobal),
     roots: { agents: join(base, '.agents', 'skills'), claude: join(base, '.claude', 'skills') },
     lockPath: isGlobal ? join(home, '.agents', '.skill-lock.json') : join(base, 'skills-lock.json'),
@@ -212,6 +245,7 @@ async function runMd(
   const requested = requestedSkills(args);
   const progress = createProgress(installingLabel(from, requested?.length ?? null, scope.label));
   const before = snapshotSkills(scope.roots, scope.lockPath);
+  const entries = entrySignatures(scope.roots);
   let started = false;
   const tick = () => {
     if (!started) return;
@@ -249,6 +283,7 @@ async function runMd(
     return reportCapturedFailure(r);
   }
   const changed = changedSince(scope, before);
+  removeLeftovers(scope, entries, changed);
   await progress.done(installingLabel(from, requested?.length ?? changed.length, scope.label));
   printTable(scope, changed);
   console.log(summaryLine('Installed', changed, scope.label));
@@ -259,8 +294,10 @@ async function runLg(args: string[], spawn: Spawner, scope: AddScope): Promise<n
   // the table is extra on top of the npx proxy: a broken lock or skill dir must not stop
   // npx from running or turn its success into a crash, so it only drops the md output
   let before: Map<string, string> | null = null;
+  let entries = new Map<string, string>();
   try {
     before = snapshotSkills(scope.roots, scope.lockPath);
+    entries = entrySignatures(scope.roots);
   } catch {}
   const r = await spawn('npx', ['-y', 'skills', 'add', ...args], false);
   if (failedToRun(r)) return 1;
@@ -268,6 +305,7 @@ async function runLg(args: string[], spawn: Spawner, scope: AddScope): Promise<n
   if (before === null) return 0;
   try {
     const changed = changedSince(scope, before);
+    removeLeftovers(scope, entries, changed);
     // e.g. -l: nothing installed, the npx output is all there is to show
     if (changed.length === 0) return 0;
     const requested = requestedSkills(args);
@@ -283,9 +321,12 @@ async function runLg(args: string[], spawn: Spawner, scope: AddScope): Promise<n
 
 async function runSm(args: string[], spawn: Spawner, scope: AddScope): Promise<number> {
   const before = snapshotSkills(scope.roots, scope.lockPath);
+  const entries = entrySignatures(scope.roots);
   const r = await spawn('npx', ['-y', 'skills', 'add', ...args], true);
   if (r.error || r.status !== 0) return reportCapturedFailure(r);
-  console.log(summaryLine('Installed', changedSince(scope, before), scope.label));
+  const changed = changedSince(scope, before);
+  removeLeftovers(scope, entries, changed);
+  console.log(summaryLine('Installed', changed, scope.label));
   return 0;
 }
 
