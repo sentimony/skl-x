@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.11 (2026-10-18)
+
+### Added
+
+- `skl update` (alias `skl up`) installs the latest skl-x from npm globally:
+  `npm i -g skl-x@<latest>`, then `skl-x <latest> installed successfully.`; on the latest version it
+  prints `skl-x X.Y.Z is already the latest.` and installs nothing. Only a global npm install is
+  updated: under `npx` it installs nothing (exit 0), and a local copy (a project dependency or a
+  clone) exits 1 with its folder. The update notice is not printed before or after it.
+
+### Changed
+
+- The update notice says `Run: skl update` when skl-x runs from a global npm install, and
+  `Run: npm i -g skl-x` otherwise.
+
 ## 0.4.10 (2026-10-18)
 
 ### Fixed
