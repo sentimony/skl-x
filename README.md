@@ -55,6 +55,8 @@ final line is printed. If `npx` fails, its full output is printed.
 `npx skills add` replaces a skill only in the dirs of `-a`. After it succeeds, `add` removes what
 is left of each added skill in the other agent dir, such as a `skl sln` link or a copy for the
 other agent, as `skl rm` before the install would. The target of a removed link is not touched.
+Entries in the dirs of `-a` stay; without `-a`, so does an entry that resolves to the skill's
+entry in the other dir. If an added skill is missing for an agent of `-a`, `add` exits 1.
 
 ### Local skills
 

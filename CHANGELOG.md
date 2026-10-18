@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.10 (2026-10-18)
+
+### Fixed
+
+- `add` no longer removes the `.claude/skills` link that a rerun of `npx skills add -a codex
+  claude-code` leaves as it was: every second run left Claude Code without the skills (0.4.9).
+  An entry in a dir of an agent named with `-a` is kept; without `-a`, an entry that resolves to
+  the skill's entry in the other dir is kept. Entries outside `-a` and `skl sln` links elsewhere
+  are still removed.
+- `add` exits 1 and names the dir (`skl add: <name> is missing in .claude/skills`) when an added
+  skill is missing for an agent of `-a`, instead of printing `Installed`.
+
 ## 0.4.9 (2026-10-18)
 
 ### Changed
