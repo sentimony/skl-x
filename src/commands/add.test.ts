@@ -579,18 +579,64 @@ describe('runAdd - entries npx left behind', () => {
     },
   );
 
-  it('removes a .claude link into .agents that npx did not rewrite, without -s', async () => {
-    mkdirSync(agents('tdd'), { recursive: true });
+  // what a first `npx skills add -a codex claude-code` leaves: a copy and a link into it
+  function npxLayout(name: string): void {
+    mkdirSync(agents(name), { recursive: true });
     mkdirSync(join(proj, '.claude', 'skills'), { recursive: true });
-    symlinkSync('../../.agents/skills/tdd', claude('tdd'));
-    lutimesSync(claude('tdd'), new Date(0), new Date(0));
+    symlinkSync(`../../.agents/skills/${name}`, claude(name));
+    lutimesSync(claude(name), new Date(0), new Date(0));
+  }
+
+  it('removes a .claude link into .agents that npx did not rewrite with -a codex', async () => {
+    npxLayout('tdd');
     const spawn = vi.fn(() => {
       installCodex('tdd');
       return ok();
     });
-    expect(await runAdd(['sentimony/skills', '-y', '-m', 'sm'], { spawn, cwd: proj })).toBe(0);
+    const args = ['sentimony/skills', '-a', 'codex', '-y', '-m', 'sm'];
+    expect(await runAdd(args, { spawn, cwd: proj })).toBe(0);
     expect(lstatSync(claude('tdd'), { throwIfNoEntry: false })).toBeUndefined();
     expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
+  });
+
+  it('keeps the .claude link npx left as it was on a rerun with -a codex claude-code', async () => {
+    npxLayout('tdd');
+    // npx rewrites the copy and leaves a link that already points at it
+    const spawn = vi.fn(() => {
+      installCodex('tdd');
+      return ok();
+    });
+    const args = ['sentimony/skills', '-s', 'tdd', '-a', 'codex', 'claude-code', '-y', '-m', 'sm'];
+    for (let run = 0; run < 2; run++) {
+      expect(await runAdd(args, { spawn, cwd: proj })).toBe(0);
+      expect(readlinkSync(claude('tdd'))).toBe('../../.agents/skills/tdd');
+    }
+  });
+
+  it('without -a keeps a link into the new copy and removes a skl sln link', async () => {
+    npxLayout('tdd');
+    const target = slnLink(claude('vitest'), 'vitest');
+    const spawn = vi.fn(() => {
+      installCodex('tdd');
+      rmSync(agents('vitest'), { recursive: true, force: true });
+      mkdirSync(agents('vitest'), { recursive: true });
+      return ok();
+    });
+    expect(await runAdd(['sentimony/skills', '-y', '-m', 'sm'], { spawn, cwd: proj })).toBe(0);
+    expect(readlinkSync(claude('tdd'))).toBe('../../.agents/skills/tdd');
+    expect(lstatSync(claude('vitest'), { throwIfNoEntry: false })).toBeUndefined();
+    expect(existsSync(join(target, 'SKILL.md'))).toBe(true);
+  });
+
+  it('exits 1 and names the dir when a skill is missing for an agent of -a', async () => {
+    const spawn = vi.fn(() => {
+      installCodex('tdd');
+      return ok();
+    });
+    const args = ['sentimony/skills', '-s', 'tdd', '-a', 'codex', 'claude-code', '-y', '-m', 'sm'];
+    expect(await runAdd(args, { spawn, cwd: proj })).toBe(1);
+    expect(console.error).toHaveBeenCalledWith('skl add: tdd is missing in .claude/skills');
+    expect(console.log).not.toHaveBeenCalled();
   });
 
   it('keeps the entries npx rewrote and the skills it did not install', async () => {

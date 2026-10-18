@@ -1,6 +1,6 @@
 import { spawn as spawnAsync, spawnSync } from 'node:child_process';
 import { lookup } from 'node:dns/promises';
-import { existsSync, lstatSync, readdirSync, readlinkSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readlinkSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readLock } from '../lock/file';
@@ -149,19 +149,75 @@ function entrySignatures(roots: SkillRoots): Map<string, string> {
   return out;
 }
 
-// npx rewrites a skill only in the dirs of -a; an entry of an installed skill it left as it was
-// (a skl sln link, a copy for another agent) is removed, as skl rm before the install would.
-// After the install, not before: a failed or skipped install keeps the old skill
-function removeLeftovers(scope: AddScope, before: Map<string, string>, installed: string[]): void {
+// The skill dirs that the agents of -a write to; null without -a. Agents outside these two dirs
+// are not tracked
+export function agentRoots(args: string[], roots: SkillRoots): string[] | null {
+  if (args.includes('--all')) return [roots.agents, roots.claude];
+  const agents: string[] = [];
+  args.forEach((t, i) => {
+    if (t !== '-a' && t !== '--agent') return;
+    for (const a of args.slice(i + 1)) {
+      if (a.startsWith('-')) break;
+      agents.push(a);
+    }
+  });
+  if (agents.length === 0) return null;
+  if (agents.includes('*')) return [roots.agents, roots.claude];
+  return [
+    ...(agents.includes('codex') ? [roots.agents] : []),
+    ...(agents.includes('claude-code') ? [roots.claude] : []),
+  ];
+}
+
+function realOrNull(p: string): string | null {
+  try {
+    return realpathSync(p);
+  } catch {
+    return null;
+  }
+}
+
+// npx rewrites a skill only in the dirs of -a, and leaves an entry there that is already right
+// (on a rerun, the .claude link into .agents). An entry of an installed skill that npx left as it
+// was outside -a (a skl sln link, a copy for another agent) is removed, as skl rm before the
+// install would; without -a, unless it resolves to the skill's entry in the other dir. After the
+// install, not before: a failed or skipped install keeps the old skill. Returns the skills missing
+// for an agent of -a
+function removeLeftovers(
+  scope: AddScope,
+  before: Map<string, string>,
+  installed: string[],
+  owned: string[] | null,
+): string[] {
   const now = entrySignatures(scope.roots);
+  const both = [scope.roots.agents, scope.roots.claude];
   for (const name of installed) {
-    for (const root of [scope.roots.agents, scope.roots.claude]) {
+    for (const root of both) {
       const dir = join(root, name);
       const was = before.get(dir);
-      if (was !== undefined && now.get(dir) === was)
-        rmSkillDir(dir, { allowedRoots: [scope.base] });
+      if (was === undefined || now.get(dir) !== was) continue;
+      if (owned !== null && owned.includes(root)) continue;
+      const other = join(both.find((r) => r !== root) ?? root, name);
+      const real = realOrNull(dir);
+      if (owned === null && real !== null && real === realOrNull(other)) continue;
+      rmSkillDir(dir, { allowedRoots: [scope.base] });
     }
   }
+  const missing: string[] = [];
+  for (const name of installed) {
+    for (const root of owned ?? []) {
+      if (lstatSync(join(root, name), { throwIfNoEntry: false })) continue;
+      const label = root === scope.roots.claude ? '.claude/skills' : '.agents/skills';
+      missing.push(`skl add: ${name} is missing in ${label}`);
+    }
+  }
+  return missing;
+}
+
+// prints each missing entry; true when there was one
+function reportMissing(missing: string[]): boolean {
+  for (const m of missing) console.error(m);
+  return missing.length > 0;
 }
 
 // `owner/repo` is the GitHub shorthand of `npx skills add`; URLs, paths and deeper paths stay as given
@@ -283,7 +339,10 @@ async function runMd(
     return reportCapturedFailure(r);
   }
   const changed = changedSince(scope, before);
-  removeLeftovers(scope, entries, changed);
+  if (reportMissing(removeLeftovers(scope, entries, changed, agentRoots(args, scope.roots)))) {
+    progress.fail();
+    return 1;
+  }
   await progress.done(installingLabel(from, requested?.length ?? changed.length, scope.label));
   printTable(scope, changed);
   console.log(summaryLine('Installed', changed, scope.label));
@@ -305,7 +364,8 @@ async function runLg(args: string[], spawn: Spawner, scope: AddScope): Promise<n
   if (before === null) return 0;
   try {
     const changed = changedSince(scope, before);
-    removeLeftovers(scope, entries, changed);
+    if (reportMissing(removeLeftovers(scope, entries, changed, agentRoots(args, scope.roots))))
+      return 1;
     // e.g. -l: nothing installed, the npx output is all there is to show
     if (changed.length === 0) return 0;
     const requested = requestedSkills(args);
@@ -325,7 +385,8 @@ async function runSm(args: string[], spawn: Spawner, scope: AddScope): Promise<n
   const r = await spawn('npx', ['-y', 'skills', 'add', ...args], true);
   if (r.error || r.status !== 0) return reportCapturedFailure(r);
   const changed = changedSince(scope, before);
-  removeLeftovers(scope, entries, changed);
+  if (reportMissing(removeLeftovers(scope, entries, changed, agentRoots(args, scope.roots))))
+    return 1;
   console.log(summaryLine('Installed', changed, scope.label));
   return 0;
 }
