@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.9 (2026-10-18)
+
+### Changed
+
+- `sln` removes each selected skill as `skl rm` does before linking it: the copy or link in the
+  agent dir outside `-a` and the `skills-lock.json` entry. Without `-y` these are listed with the
+  replaced copies (`skills-lock.json - <name>`) under one `Replace N existing skills?` question.
+  An entry the source is reached through is refused, as for a replace.
+- `add` removes, after `npx skills add` succeeds, the entries of each added skill that `npx` did
+  not rewrite (a `skl sln` link or a copy in the agent dir outside `-a`). A failed install leaves
+  them in place.
+
 ## 0.4.8 (2026-10-12)
 
 ### Changed

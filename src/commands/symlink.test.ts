@@ -14,6 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readLock } from '../lock/file';
 import { parseSymlinkArgs, planSymlinks, runSln, runSymlink } from './symlink';
 
 describe('parseSymlinkArgs', () => {
@@ -504,12 +505,80 @@ describe('planSymlinks / runSymlink', () => {
     expect(existsSync(join(proj, '.agents'))).toBe(false);
   });
 
-  it('marks skills that are in skills-lock.json with + in the table', async () => {
-    writeFileSync(join(proj, 'skills-lock.json'), JSON.stringify({ skills: { tdd: {} } }));
+  it('removes the skills-lock.json entry of a linked skill and keeps the others', async () => {
+    writeFileSync(
+      join(proj, 'skills-lock.json'),
+      JSON.stringify({ skills: { tdd: {}, other: {} } }),
+    );
     expect(await runSymlink(['../clone', '-s', 'tdd', '-y'], { cwd: proj })).toBe(0);
     expect(console.log).toHaveBeenCalledWith(
-      'tdd    symlinked  symlinked  +                 ~4 tok',
+      'tdd    symlinked  symlinked  -                 ~4 tok',
     );
+    expect(Object.keys(readLock(join(proj, 'skills-lock.json')).skills)).toEqual(['other']);
+  });
+
+  it('removes a copy in a dir outside -a, like skl rm', async () => {
+    mkdirSync(join(proj, '.agents/skills/tdd'), { recursive: true });
+    mkdirSync(join(proj, '.claude/skills/tdd'), { recursive: true });
+    writeFileSync(join(proj, 'skills-lock.json'), JSON.stringify({ skills: { tdd: {} } }));
+    expect(await runSymlink(['../clone', '-s', 'tdd', '-a', 'codex', '-y'], { cwd: proj })).toBe(0);
+    expect(readlinkSync(join(proj, '.agents/skills/tdd'))).toBe('../../../clone/skills/tdd');
+    expect(lstatSync(join(proj, '.claude/skills/tdd'), { throwIfNoEntry: false })).toBeUndefined();
+    expect(readLock(join(proj, 'skills-lock.json')).skills).toEqual({});
+  });
+
+  it('removes a dangling symlink outside -a, leaving the targets of links alone', async () => {
+    mkdirSync(join(proj, '.claude/skills'), { recursive: true });
+    symlinkSync('../../nowhere', join(proj, '.claude/skills/tdd'));
+    symlinkSync('../../../clone/skills/cross-review', join(proj, '.claude/skills/cross-review'));
+    expect(
+      await runSymlink(['../clone', '-s', 'tdd', 'cross-review', '-a', 'codex', '-y'], {
+        cwd: proj,
+      }),
+    ).toBe(0);
+    expect(readdirSync(join(proj, '.claude/skills'))).toEqual([]);
+    expect(existsSync(join(clone, 'skills/cross-review/SKILL.md'))).toBe(true);
+  });
+
+  it('lists the dir copy and the lock entry once and changes nothing on no', async () => {
+    mkdirSync(join(proj, '.claude/skills/tdd'), { recursive: true });
+    writeFileSync(join(proj, 'skills-lock.json'), JSON.stringify({ skills: { tdd: {} } }));
+    const confirm = vi.fn(async (_q: string) => false);
+    expect(await runSymlink(['../clone', '-s', 'tdd', '-a', 'codex'], { cwd: proj, confirm })).toBe(
+      1,
+    );
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(confirm).toHaveBeenCalledWith('Replace 1 existing skill?');
+    expect(console.log).toHaveBeenCalledWith('.claude/skills/tdd - folder');
+    expect(console.log).toHaveBeenCalledWith('skills-lock.json - tdd');
+    expect(lstatSync(join(proj, '.claude/skills/tdd')).isDirectory()).toBe(true);
+    expect(existsSync(join(proj, '.agents'))).toBe(false);
+    expect(Object.keys(readLock(join(proj, 'skills-lock.json')).skills)).toEqual(['tdd']);
+  });
+
+  it('asks for a skill that is only in skills-lock.json', async () => {
+    writeFileSync(join(proj, 'skills-lock.json'), JSON.stringify({ skills: { tdd: {} } }));
+    const confirm = vi.fn(async (_q: string) => true);
+    expect(await runSymlink(['../clone', '-s', 'tdd'], { cwd: proj, confirm })).toBe(0);
+    expect(confirm).toHaveBeenCalledWith('Replace 1 existing skill?');
+    expect(readLock(join(proj, 'skills-lock.json')).skills).toEqual({});
+  });
+
+  it('keeps .claude/skills -> .agents/skills when linking for codex only', async () => {
+    mkdirSync(join(proj, '.agents/skills'), { recursive: true });
+    mkdirSync(join(proj, '.claude'));
+    symlinkSync('../.agents/skills', join(proj, '.claude/skills'));
+    expect(await runSymlink(['../clone', '-s', 'tdd', '-a', 'codex', '-y'], { cwd: proj })).toBe(0);
+    expect(realpathSync(join(proj, '.claude/skills/tdd'))).toBe(join(clone, 'skills/tdd'));
+  });
+
+  it('refuses to remove an entry outside -a that the source is reached through', async () => {
+    mkdirSync(join(proj, '.claude/skills'), { recursive: true });
+    symlinkSync('../../../clone/skills/tdd', join(proj, '.claude/skills/tdd'));
+    expect(await runSymlink(['.claude', '-s', 'tdd', '-a', 'codex', '-y'], { cwd: proj })).toBe(1);
+    expect(readlinkSync(join(proj, '.claude/skills/tdd'))).toBe('../../../clone/skills/tdd');
+    expect(existsSync(join(proj, '.agents'))).toBe(false);
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('is the source itself'));
   });
 
   const logged = () => vi.mocked(console.log).mock.calls.map((c) => c[0]);
