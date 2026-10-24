@@ -37,6 +37,32 @@ function seedAllStates(): string {
 }
 
 describe('skl ls', () => {
+  it('-m sm prints one summary line', () => {
+    expect(run(['ls', '-m', 'sm'], LOCK_DIR).stdout).toBe('Project scope · 3 skills · ~24 tok\n');
+    expect(run(['ls', '--mode=small'], LOCK_DIR).stdout).toBe('Project scope · 3 skills · ~24 tok\n');
+  });
+
+  it('-m sm on an empty scope says "No skills"', () => {
+    expect(run(['ls', '-m', 'sm'], EMPTY).stdout).toBe('Project scope · No skills\n');
+  });
+
+  it('-g -m sm on an empty global scope says "No skills"', () => {
+    tmp = mkdtempSync(join(tmpdir(), 'skl-ls-home-'));
+    expect(run(['ls', '-g', '-m', 'sm'], EMPTY, { HOME: tmp }).stdout).toBe('Global scope · No skills\n');
+  });
+
+  it('-m md prints the table', () => {
+    expect(run(['ls', '-m', 'md'], LOCK_DIR).stdout).toBe(run(['ls'], LOCK_DIR).stdout);
+  });
+
+  it('rejects an unknown mode, also with --names', () => {
+    for (const args of [['ls', '-m', 'loud'], ['ls', '--names', '-m', 'loud']]) {
+      const r = run(args, LOCK_DIR);
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toContain('skl ls: unknown mode "loud"');
+    }
+  });
+
   it('in a subdirectory of a git repo lists the skills of the repo root', () => {
     tmp = mkdtempSync(join(tmpdir(), 'skl-ls-sub-'));
     cpSync(LOCK_DIR, tmp, { recursive: true });
@@ -53,18 +79,18 @@ describe('skl ls', () => {
     expect(stdout).toBe(
       [
         'Project scope',
-        'skill      .agents  .claude  skills-lock.json  cost',
-        'skill-bar  -        copied   +                 ~11 tok',
-        'skill-baz  -        -        +                 ~? tok',
-        'skill-foo  -        copied   +                 ~13 tok',
-        '3 skills   0        2        3                 ~24 tok',
+        'skill      .agents  .claude  skills-lock.json     cost',
+        'skill-bar        -   copied         +          ~11 tok',
+        'skill-baz        -        -         +           ~? tok',
+        'skill-foo        -   copied         +          ~13 tok',
+        '3 skills         0        2         3          ~24 tok',
         '',
       ].join('\n'),
     );
   });
 
   it('list alias works', () => {
-    expect(run(['list'], LOCK_DIR).stdout).toContain('skill-bar  -        copied   +                 ~11 tok');
+    expect(run(['list'], LOCK_DIR).stdout).toContain('skill-bar        -   copied         +          ~11 tok');
   });
 
   it('shows every install state and no "not in lock" lines', () => {
@@ -73,12 +99,12 @@ describe('skl ls', () => {
     expect(stdout).toBe(
       [
         'Project scope',
-        'skill     .agents    .claude    skills-lock.json  cost',
-        'a         universal  symlinked  +                 ~0 tok',
-        'b         -          copied     -                 ~0 tok',
-        'c         -          broken     -                 ~? tok',
-        'd         -          -          +                 ~? tok',
-        '4 skills  1          3          2                 ~0 tok',
+        'skill       .agents    .claude  skills-lock.json    cost',
+        'a         universal  symlinked         +          ~0 tok',
+        'b                 -     copied         -          ~0 tok',
+        'c                 -     broken         -          ~? tok',
+        'd                 -          -         +          ~? tok',
+        '4 skills          1          3         2          ~0 tok',
         '',
       ].join('\n'),
     );
@@ -118,9 +144,9 @@ describe('skl ls', () => {
     expect(r.stdout).toBe(
       [
         'Global scope',
-        'skill    .agents  .claude  .agents/.skill-lock.json  cost',
-        'foo      -        -        +                         ~? tok',
-        '1 skill  0        0        1                         ~0 tok',
+        'skill    .agents  .claude  .agents/.skill-lock.json    cost',
+        'foo            -        -             +              ~? tok',
+        '1 skill        0        0             1              ~0 tok',
         '',
       ].join('\n'),
     );

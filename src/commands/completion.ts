@@ -16,6 +16,14 @@ _skl_x_completions() {
 
   local sub="\${COMP_WORDS[1]}"
   case "\${sub}" in
+    ls|list)
+      if [ "\${prev}" = "-m" ] || [ "\${prev}" = "--mode" ]; then
+        COMPREPLY=( $(compgen -W "sm md lg" -- "\${cur}") )
+      else
+        COMPREPLY=( $(compgen -W "-g --global -m --mode --names -h --help" -- "\${cur}") )
+      fi
+      return 0
+      ;;
     rm|remove)
       if [[ "\${cur}" == -* ]]; then
         COMPREPLY=( $(compgen -W "-g --global -y --yes -x --reject -m --mode --lock-only --agents-only --claude-only -h --help" -- "\${cur}") )
@@ -90,6 +98,16 @@ _skl_x() {
   fi
   local sub=\${words[2]}
   case $sub in
+    ls|list)
+      if [[ \${words[CURRENT-1]} == -m || \${words[CURRENT-1]} == --mode ]]; then
+        _values 'mode' sm md lg
+      else
+        _values 'flag' \\
+          '-g[global scope]' '--global[global scope]' \\
+          '-m[sm, md or lg]' '--mode[sm, md or lg]' \\
+          '--names[one skill name per line]'
+      fi
+      ;;
     rm|remove)
       if [[ \${words[CURRENT]} == -* ]]; then
         _values 'flag' \\
@@ -185,6 +203,14 @@ for sub in rm remove
   complete -c skl -n "__skl_x_using_subcommand $sub" -l lock-only -d 'Only remove lock entry'
   complete -c skl -n "__skl_x_using_subcommand $sub" -l agents-only -d 'Only remove from .agents/skills'
   complete -c skl -n "__skl_x_using_subcommand $sub" -l claude-only -d 'Only remove from .claude/skills'
+end
+
+for sub in ls list
+  for bin in skl skl-x
+    complete -c $bin -n "__skl_x_using_subcommand $sub" -s g -l global -d 'Use global scope'
+    complete -c $bin -n "__skl_x_using_subcommand $sub" -l names -d 'One skill name per line'
+    complete -c $bin -n "__skl_x_using_subcommand $sub" -s m -l mode -xa 'sm md lg' -d 'Output mode'
+  end
 end
 
 for bin in skl skl-x

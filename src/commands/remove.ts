@@ -7,7 +7,9 @@ import { createConfirmer } from '../utils/confirm';
 import { discoverSkills } from '../utils/discover-skills';
 import { countFoldersAndFiles, lstatOrNull, rmSkillDir } from '../utils/fs-rm';
 import { extractMode } from '../utils/mode';
-import { scopeLabel, scopeLockPath } from '../utils/scope';
+import { scopeLockPath } from '../utils/scope';
+import { readSkillCost, type SkillCost } from '../utils/skill-files';
+import { firstSkillFile, scopeTotalLine } from '../utils/skill-table';
 
 type LocationKind = 'real' | 'symlink' | 'missing';
 
@@ -292,7 +294,7 @@ export const removeCommand = defineCommand({
     }
 
     if (all && targets.length === 0) {
-      console.log('No skills to remove in scope.');
+      console.log(stealth ? gray(scopeTotalLine(isGlobal, 0, 0)) : 'No skills to remove in scope.');
       return;
     }
 
@@ -310,6 +312,22 @@ export const removeCommand = defineCommand({
       targets.map((t) => t.name),
     );
     const lockSkillsToRemove = targets.filter((t) => lockNames.has(t.name)).length;
+    // read before anything is removed: SKILL.md is gone afterwards. Only the sm/md line needs
+    // it, and an unreadable SKILL.md must not block the removal
+    const roots = {
+      agents: rootFor('.agents', isGlobal, lockPath),
+      claude: rootFor('.claude', isGlobal, lockPath),
+    };
+    const costs = new Map<string, SkillCost>();
+    if (stealth) {
+      for (const t of targets) {
+        try {
+          costs.set(t.name, readSkillCost(firstSkillFile(roots, t.name), t.name));
+        } catch {
+          costs.set(t.name, 'missing');
+        }
+      }
+    }
 
     const ask = createConfirmer();
 
@@ -358,13 +376,24 @@ export const removeCommand = defineCommand({
 
     if (!yes) console.log('');
     if (stealth) {
-      const removedFrom = (pick: (t: SkillTarget) => LocationInfo, inScope: boolean) =>
-        inScope ? targets.filter((t) => pick(t).kind !== 'missing').length : 0;
-      const agentsCount = removedFrom((t) => t.agents, scope === 'all' || scope === 'agents-only');
-      const claudeCount = removedFrom((t) => t.claude, scope === 'all' || scope === 'claude-only');
-      const lockCount = lockCleaned ? lockSkillsToRemove : 0;
-      const from = scopeLabel(isGlobal);
-      console.log(gray(`Executed ${agentsCount}/${claudeCount}/${lockCount} skills from ${from}`));
+      const agentsInScope = scope === 'all' || scope === 'agents-only';
+      const claudeInScope = scope === 'all' || scope === 'claude-only';
+      // a set: `skl rm foo foo` builds two targets of one skill
+      const removed = new Set(
+        targets
+          .filter(
+            (t) =>
+              (agentsInScope && t.agents.kind !== 'missing') ||
+              (claudeInScope && t.claude.kind !== 'missing') ||
+              (lockCleaned && lockNames.has(t.name)),
+          )
+          .map((t) => t.name),
+      );
+      const cost = [...removed].reduce((n, name) => {
+        const c = costs.get(name);
+        return n + (typeof c === 'number' ? c : 0);
+      }, 0);
+      console.log(gray(scopeTotalLine(isGlobal, removed.size, cost, '-')));
       return;
     }
     printBlock(

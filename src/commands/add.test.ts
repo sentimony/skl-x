@@ -133,8 +133,8 @@ describe('runAdd - lg mode', () => {
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
       'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
-      'skill         .agents    .claude    skills-lock.json  cost',
-      'cross-review  universal  symlinked  +                 ~4 tok',
+      'skill           .agents    .claude  skills-lock.json    cost',
+      'cross-review  universal  symlinked         +          ~4 tok',
       'Installed 1 skill to Project scope · cross-review',
     ]);
   });
@@ -202,8 +202,8 @@ describe('runAdd - md mode', () => {
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
       'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
-      'skill         .agents    .claude    skills-lock.json  cost',
-      'cross-review  universal  symlinked  +                 ~4 tok',
+      'skill           .agents    .claude  skills-lock.json    cost',
+      'cross-review  universal  symlinked         +          ~4 tok',
       'Installed 1 skill to Project scope · cross-review',
     ]);
   });
@@ -260,7 +260,7 @@ describe('runAdd - md mode', () => {
     );
     expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
     expect(console.log).toHaveBeenCalledWith(
-      'tdd    universal  symlinked  +                 ~1 tok',
+      'tdd    universal  symlinked         +          ~1 tok',
     );
   });
 

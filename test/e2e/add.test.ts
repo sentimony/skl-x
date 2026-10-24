@@ -99,8 +99,8 @@ describe('skl add', () => {
     expect(stdout).toBe(
       [
         'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
-        'skill         .agents    .claude    skills-lock.json  cost',
-        'cross-review  universal  symlinked  -                 ~4 tok',
+        'skill           .agents    .claude  skills-lock.json    cost',
+        'cross-review  universal  symlinked         -          ~4 tok',
         'Installed 1 skill to Project scope · cross-review',
         '',
       ].join('\n'),
@@ -143,8 +143,8 @@ describe('skl add', () => {
       [
         'NOISE',
         'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
-        'skill         .agents    .claude    skills-lock.json  cost',
-        'cross-review  universal  symlinked  -                 ~4 tok',
+        'skill           .agents    .claude  skills-lock.json    cost',
+        'cross-review  universal  symlinked         -          ~4 tok',
         'Installed 1 skill to Project scope · cross-review',
         '',
       ].join('\n'),

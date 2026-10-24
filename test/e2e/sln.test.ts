@@ -42,9 +42,9 @@ describe('skl sln', () => {
     expect(stdout).toBe(
       [
         'Symlinking 2 skills from ../clone to Project scope ██████████ 100%',
-        'skill   .agents    .claude    skills-lock.json  cost',
-        'tdd     symlinked  symlinked  -                 ~1 tok',
-        'vitest  symlinked  symlinked  -                 ~2 tok',
+        'skill     .agents    .claude  skills-lock.json    cost',
+        'tdd     symlinked  symlinked         -          ~1 tok',
+        'vitest  symlinked  symlinked         -          ~2 tok',
         'Symlinked 2 skills to Project scope · tdd vitest',
         '',
       ].join('\n'),
@@ -61,8 +61,8 @@ describe('skl sln', () => {
     expect(md.stdout).toBe(
       [
         'Symlinking 1 skill from ../clone to Project scope ██████████ 100%',
-        'skill   .agents    .claude    skills-lock.json  cost',
-        'vitest  symlinked  symlinked  -                 ~2 tok',
+        'skill     .agents    .claude  skills-lock.json    cost',
+        'vitest  symlinked  symlinked         -          ~2 tok',
         'Symlinked 1 skill to Project scope · vitest',
         '',
       ].join('\n'),
