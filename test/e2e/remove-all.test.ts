@@ -198,7 +198,7 @@ describe('skl rm .', () => {
     mkdirSync(join(tmp, '.agents', 'skills', 'foo'), { recursive: true });
     const r = rmAll(['-y', '-m', 'sm']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe('Project scope · -3 skills · ~30 tok\n');
+    expect(r.stdout).toBe('Project scope · -3 skills removed · ~30 tok\n');
     expect(existsSync(join(tmp, '.agents', 'skills', 'foo'))).toBe(false);
     expect(existsSync(join(tmp, '.claude', 'skills', 'foo'))).toBe(false);
     const lock = JSON.parse(readFileSync(join(tmp, 'skills-lock.json'), 'utf8'));
@@ -207,9 +207,9 @@ describe('skl rm .', () => {
 
   it('--mode small and --mode=sm are the long forms of -m sm', () => {
     seed3();
-    expect(rmAll(['--yes', '--mode', 'small']).stdout).toBe('Project scope · -3 skills · ~30 tok\n');
+    expect(rmAll(['--yes', '--mode', 'small']).stdout).toBe('Project scope · -3 skills removed · ~30 tok\n');
     seed3();
-    expect(rmAll(['--yes', '--mode=sm']).stdout).toBe('Project scope · -3 skills · ~30 tok\n');
+    expect(rmAll(['--yes', '--mode=sm']).stdout).toBe('Project scope · -3 skills removed · ~30 tok\n');
   });
 
   it('-m sm without -y keeps the plan and prompts, replaces only the summary', () => {
@@ -219,14 +219,14 @@ describe('skl rm .', () => {
     expect(r.stdout).toContain('will be removed from:');
     expect(r.stdout).toContain('Proceed?');
     expect(r.stdout).not.toContain('3 skills bar baz foo removed from:');
-    expect(r.stdout.trimEnd().endsWith('Project scope · -3 skills · ~30 tok')).toBe(true);
+    expect(r.stdout.trimEnd().endsWith('Project scope · -3 skills removed · ~30 tok')).toBe(true);
   });
 
   it('-m sm with --lock-only counts the skills removed from the lock', () => {
     seed3();
     const r = rmAll(['--lock-only', '-y', '-m', 'sm']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe('Project scope · -3 skills · ~30 tok\n');
+    expect(r.stdout).toBe('Project scope · -3 skills removed · ~30 tok\n');
     expect(existsSync(join(tmp, '.claude', 'skills', 'foo', 'SKILL.md'))).toBe(true);
   });
 
@@ -234,15 +234,15 @@ describe('skl rm .', () => {
     seed3();
     const r = rmAll(['-x', 'foo', '-m', 'sm', '-y']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe('Project scope · -2 skills · ~20 tok\n');
+    expect(r.stdout).toBe('Project scope · -2 skills removed · ~20 tok\n');
     expect(existsSync(join(tmp, '.claude', 'skills', 'foo', 'SKILL.md'))).toBe(true);
   });
 
   it('-m md and --mode medium print the same scope line as -m sm', () => {
     seed3();
-    expect(rmAll(['-y', '-m', 'md']).stdout).toBe('Project scope · -3 skills · ~30 tok\n');
+    expect(rmAll(['-y', '-m', 'md']).stdout).toBe('Project scope · -3 skills removed · ~30 tok\n');
     seed3();
-    expect(rmAll(['-y', '--mode', 'medium']).stdout).toBe('Project scope · -3 skills · ~30 tok\n');
+    expect(rmAll(['-y', '--mode', 'medium']).stdout).toBe('Project scope · -3 skills removed · ~30 tok\n');
   });
 
   it('-m sm on an empty scope says "No skills", lg keeps "No skills to remove"', () => {
@@ -259,7 +259,7 @@ describe('skl rm .', () => {
       env: { ...process.env, SKL_X_NO_UPDATE_CHECK: '1' },
     });
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe('Project scope · -1 skill · ~10 tok\n');
+    expect(r.stdout).toBe('Project scope · -1 skill removed · ~10 tok\n');
   });
 
   it('-m sm reads the cost from .claude before .agents and counts lock-only and hidden skills as 0', () => {
@@ -273,7 +273,7 @@ describe('skl rm .', () => {
     skill('.agents', 'c', `description: ${'d'.repeat(29)}\ndisable-model-invocation: true`);
     const r = rmAll(['-y', '-m', 'sm']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe('Project scope · -3 skills · ~10 tok\n');
+    expect(r.stdout).toBe('Project scope · -3 skills removed · ~10 tok\n');
   });
 
   it('an unreadable SKILL.md does not block removal; -m sm counts its cost as 0', () => {
@@ -284,7 +284,7 @@ describe('skl rm .', () => {
       const r = rmAll(args);
       expect(r.status, r.stderr).toBe(0);
       expect(existsSync(join(tmp, '.claude', 'skills', 'foo'))).toBe(false);
-      if (args.includes('sm')) expect(r.stdout).toBe('Project scope · -1 skill · ~0 tok\n');
+      if (args.includes('sm')) expect(r.stdout).toBe('Project scope · -1 skill removed · ~0 tok\n');
     }
   });
 
@@ -299,7 +299,7 @@ describe('skl rm .', () => {
     );
     const r = rmAll(['--claude-only', '-y', '-m', 'sm']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe('Project scope · -1 skill · ~10 tok\n');
+    expect(r.stdout).toBe('Project scope · -1 skill removed · ~10 tok\n');
     expect(existsSync(join(tmp, '.agents', 'skills', 'foo', 'SKILL.md'))).toBe(true);
   });
 

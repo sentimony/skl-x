@@ -71,7 +71,7 @@ export async function runUpdate(argv: string[], deps: UpdateDeps): Promise<numbe
     deps.saveLatest ?? ((v: string) => writeCache({ checkedAt: Date.now(), latest: v }));
   if (compareVersions(latest, deps.version) <= 0) {
     saveLatest(latest);
-    console.log(`skl-x ${deps.version} is already the latest.`);
+    console.log(`skl-x ${deps.version} is already the latest`);
     return 0;
   }
   const args = ['i', '-g', `skl-x@${latest}`];

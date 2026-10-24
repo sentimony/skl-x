@@ -108,7 +108,7 @@ describe('runAdd - lg mode', () => {
     expect(spawn).not.toHaveBeenCalled();
     expect(console.log).toHaveBeenCalledWith(ADD_HELP);
     expect(ADD_HELP).toContain('USAGE skl-x add <source>');
-    expect(ADD_HELP).not.toMatch(/-ln|--link|install/);
+    expect(ADD_HELP).not.toMatch(/-ln|--link/);
   });
 
   it('rejects a bad --mode value without spawning npx', async () => {
@@ -135,7 +135,7 @@ describe('runAdd - lg mode', () => {
       'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
       'skill           .agents    .claude  skills-lock.json    cost',
       'cross-review  universal  symlinked         +          ~4 tok',
-      'Installed 1 skill to Project scope · cross-review',
+      'Project scope · +1 skill installed · cross-review',
     ]);
   });
 
@@ -204,7 +204,7 @@ describe('runAdd - md mode', () => {
       'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
       'skill           .agents    .claude  skills-lock.json    cost',
       'cross-review  universal  symlinked         +          ~4 tok',
-      'Installed 1 skill to Project scope · cross-review',
+      'Project scope · +1 skill installed · cross-review',
     ]);
   });
 
@@ -235,7 +235,7 @@ describe('runAdd - md mode', () => {
     expect(await runAdd(['sentimony/skills', '-y', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
       'Installing 0 skills from https://github.com/sentimony/skills to Project scope ██████████ 100%',
-      'Installed 0 skills to Project scope',
+      'Project scope · No skills installed',
     ]);
   });
 
@@ -258,7 +258,7 @@ describe('runAdd - md mode', () => {
     expect(console.log).toHaveBeenCalledWith(
       'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
     );
-    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
+    expect(console.log).toHaveBeenCalledWith('Project scope · +1 skill installed · tdd');
     expect(console.log).toHaveBeenCalledWith(
       'tdd    universal  symlinked         +          ~1 tok',
     );
@@ -282,7 +282,7 @@ describe('runAdd - md mode', () => {
     expect(lines).toContain(
       'Installing 1 skill from https://github.com/sentimony/skills to Global scope ██████████ 100%',
     );
-    expect(lines.at(-1)).toBe('Installed 1 skill to Global scope · g1');
+    expect(lines.at(-1)).toBe('Global scope · +1 skill installed · g1');
     expect(lines.some((l) => l.startsWith('skill') && l.includes('.agents/.skill-lock.json'))).toBe(
       true,
     );
@@ -299,7 +299,7 @@ describe('runAdd - md mode', () => {
       return ok();
     });
     expect(await runAdd(['sentimony/skills', '-y', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
-    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
+    expect(console.log).toHaveBeenCalledWith('Project scope · +1 skill installed · tdd');
   });
 
   it('drops "from <source>" when the first argument is a flag', async () => {
@@ -307,7 +307,7 @@ describe('runAdd - md mode', () => {
     expect(await runAdd(['-y', 'sentimony/skills', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
       'Installing 0 skills to Project scope ██████████ 100%',
-      'Installed 0 skills to Project scope',
+      'Project scope · No skills installed',
     ]);
   });
   it('awaits an async spawner', async () => {
@@ -318,7 +318,7 @@ describe('runAdd - md mode', () => {
     expect(
       await runAdd(['sentimony/skills', '-s', 'tdd', '-y', '-m', 'md'], { spawn, cwd: proj }),
     ).toBe(0);
-    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
+    expect(console.log).toHaveBeenCalledWith('Project scope · +1 skill installed · tdd');
   });
 
   it('shows the bar once online, fills the intro, then follows npx and the disk', async () => {
@@ -384,10 +384,10 @@ describe('summaryLine', () => {
   afterEach(() => setColorEnabled(false));
 
   it('names the scope, grays the words and paints the skill names cyan', () => {
-    expect(summaryLine('Installed', [], 'Global scope')).toBe('Installed 0 skills to Global scope');
+    expect(summaryLine('installed', [], 'Global scope')).toBe('Global scope · No skills installed');
     setColorEnabled(true);
-    expect(summaryLine('Installed', ['tdd', 'vitest'], 'Project scope')).toBe(
-      '\x1b[90mInstalled 2 skills to Project scope\x1b[0m \x1b[90m·\x1b[0m \x1b[36mtdd vitest\x1b[0m',
+    expect(summaryLine('installed', ['tdd', 'vitest'], 'Project scope')).toBe(
+      '\x1b[90mProject scope · +2 skills installed\x1b[0m \x1b[90m·\x1b[0m \x1b[36mtdd vitest\x1b[0m',
     );
   });
 });
@@ -458,7 +458,7 @@ describe('runAdd - sm mode', () => {
       true,
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
-      'Installed 1 skill to Project scope · cross-review',
+      'Project scope · +1 skill installed · cross-review',
     ]);
   });
 
@@ -468,7 +468,7 @@ describe('runAdd - sm mode', () => {
       0,
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
-      'Installed 0 skills to Project scope',
+      'Project scope · No skills installed',
     ]);
   });
 
@@ -596,7 +596,7 @@ describe('runAdd - entries npx left behind', () => {
     const args = ['sentimony/skills', '-a', 'codex', '-y', '-m', 'sm'];
     expect(await runAdd(args, { spawn, cwd: proj })).toBe(0);
     expect(lstatSync(claude('tdd'), { throwIfNoEntry: false })).toBeUndefined();
-    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
+    expect(console.log).toHaveBeenCalledWith('Project scope · +1 skill installed · tdd');
   });
 
   it('keeps the .claude link npx left as it was on a rerun with -a codex claude-code', async () => {

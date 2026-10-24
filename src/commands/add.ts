@@ -84,8 +84,8 @@ export const ADD_HELP = [
   '  -y, --yes           Skip npx prompts (needed by sm and md)',
   '  -m, --mode          lg (large, default): the npx output, then the md output',
   '                      md (medium): a progress line, a table of the changed skills and',
-  '                      an "Installed N skills · <names>" line',
-  '                      sm (small): the "Installed N skills · <names>" line only',
+  '                      a "<scope> · +N skills installed · <names>" line',
+  '                      sm (small): the "<scope> · +N skills installed · <names>" line only',
   '',
   'EXAMPLES',
   '',
@@ -99,10 +99,11 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
 
-// "Installed 2 skills to Project scope · tdd vitest"; the last line of every mode
+// "Project scope · +2 skills installed · tdd vitest"; the last line of every mode
 export function summaryLine(verb: string, names: string[], scope: string): string {
-  const count = gray(`${verb} ${plural(names.length, 'skill')} to ${scope}`);
-  return names.length === 0 ? count : `${count} ${gray('·')} ${cyan(names.join(' '))}`;
+  if (names.length === 0) return gray(`${scope} · No skills ${verb}`);
+  const count = gray(`${scope} · +${plural(names.length, 'skill')} ${verb}`);
+  return `${count} ${gray('·')} ${cyan(names.join(' '))}`;
 }
 
 // "Installing 2 skills from <source> to Project scope"; without a count while the total is unknown
@@ -345,7 +346,7 @@ async function runMd(
   }
   await progress.done(installingLabel(from, requested?.length ?? changed.length, scope.label));
   printTable(scope, changed);
-  console.log(summaryLine('Installed', changed, scope.label));
+  console.log(summaryLine('installed', changed, scope.label));
   return 0;
 }
 
@@ -374,7 +375,7 @@ async function runLg(args: string[], spawn: Spawner, scope: AddScope): Promise<n
       `${gray(installingLabel(from, requested?.length ?? changed.length, scope.label))} ${renderBar(1)}`,
     );
     printTable(scope, changed);
-    console.log(summaryLine('Installed', changed, scope.label));
+    console.log(summaryLine('installed', changed, scope.label));
   } catch {}
   return 0;
 }
@@ -387,7 +388,7 @@ async function runSm(args: string[], spawn: Spawner, scope: AddScope): Promise<n
   const changed = changedSince(scope, before);
   if (reportMissing(removeLeftovers(scope, entries, changed, agentRoots(args, scope.roots))))
     return 1;
-  console.log(summaryLine('Installed', changed, scope.label));
+  console.log(summaryLine('installed', changed, scope.label));
   return 0;
 }
 

@@ -97,7 +97,7 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
 
-// "Project scope · -30 skills · ~3,333 tok"; the sm line of skl rm (sign '-') and skl ls
+// "Project scope · -30 skills removed · ~3,333 tok"; the sm line of skl rm (sign '-') and skl ls
 export function scopeTotalLine(
   isGlobal: boolean,
   skills: number,
@@ -106,7 +106,8 @@ export function scopeTotalLine(
 ): string {
   const scope = scopeLabel(isGlobal);
   if (skills === 0) return `${scope} · No skills`;
-  return `${scope} · ${sign}${plural(skills, 'skill')} · ${formatCost(cost)}`;
+  const removed = sign === '-' ? ' removed' : '';
+  return `${scope} · ${sign}${plural(skills, 'skill')}${removed} · ${formatCost(cost)}`;
 }
 
 export function renderSkillTable(

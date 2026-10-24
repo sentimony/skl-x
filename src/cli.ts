@@ -148,7 +148,7 @@ function printRemoveHelp(): void {
     '                       "Proceed?" and "Clean skills-lock.json?" questions)',
     '                       and the plan; only the summary is printed',
     '  -m, --mode           lg (large, default): plan and summary',
-    '                       md (medium), sm (small): one "<scope> · -N skills · ~X tok" line',
+    '                       md (medium), sm (small): one "<scope> · -N skills removed · ~X tok" line',
     '                       instead of the summary',
     '  -x, --reject         With ".": skill names to keep (space-separated)',
     '      --lock-only      Only remove the skills-lock.json entry',

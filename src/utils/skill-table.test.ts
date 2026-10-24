@@ -83,7 +83,9 @@ describe('renderSkillTable', () => {
 
 describe('scopeTotalLine', () => {
   it('prints the scope, signed count and grouped cost', () => {
-    expect(scopeTotalLine(false, 30, 3333, '-')).toBe('Project scope · -30 skills · ~3,333 tok');
+    expect(scopeTotalLine(false, 30, 3333, '-')).toBe(
+      'Project scope · -30 skills removed · ~3,333 tok',
+    );
     expect(scopeTotalLine(true, 1, 74)).toBe('Global scope · 1 skill · ~74 tok');
   });
 
