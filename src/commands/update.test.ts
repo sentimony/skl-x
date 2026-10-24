@@ -56,7 +56,7 @@ describe('runUpdate', () => {
     const d = deps({ latest: async () => '0.4.10' });
     expect(await runUpdate([], d.deps)).toBe(0);
     expect(d.calls).toEqual([]);
-    expect(out).toEqual(['skl-x 0.4.10 is already the latest.']);
+    expect(out).toEqual(['skl-x 0.4.10 is already the latest']);
     expect(d.saved).toEqual(['0.4.10']);
   });
 

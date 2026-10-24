@@ -39,7 +39,7 @@ npx -y skl-x add sentimony/skills -s tdd -a codex claude-code -y -m sm
 Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%
 skill    .agents    .claude  skills-lock.json      cost
 tdd    universal  symlinked         +          ~125 tok
-Installed 1 skill to Project scope · tdd
+Project scope · +1 skill installed · tdd
 ```
 
 Without `-m` (`lg`), the `npx skills add` output is shown as is, followed by the same lines when
@@ -91,7 +91,7 @@ Symlinking 2 skills from ../skills to Project scope █████████�
 skill           .agents    .claude  skills-lock.json      cost
 cross-review  symlinked  symlinked         -          ~186 tok
 tdd           symlinked  symlinked         -          ~125 tok
-Symlinked 2 skills to Project scope · cross-review tdd
+Project scope · +2 skills symlinked · cross-review tdd
 ```
 
 - Without `-s`, every `<path>/skills/<name>/SKILL.md` is linked (or `<path>/<name>/SKILL.md`
@@ -114,8 +114,8 @@ Symlinked 2 skills to Project scope · cross-review tdd
 | Mode | `add` | `sln` | `rm` |
 |---|---|---|---|
 | `lg` | `npx` output, then the `md` lines | as `md` | plan and summary |
-| `md` | progress line, table, `Installed N skills to <scope> · <names>` | progress line, table, `Symlinked N skills to <scope> · <names>` | `<scope> · -N skills · ~X tok` |
-| `sm` | `Installed N skills to <scope> · <names>` | `Symlinked N skills to <scope> · <names>` | `<scope> · -N skills · ~X tok` |
+| `md` | progress line, table, `<scope> · +N skills installed · <names>` | progress line, table, `<scope> · +N skills symlinked · <names>` | `<scope> · -N skills removed · ~X tok` |
+| `sm` | `<scope> · +N skills installed · <names>` | `<scope> · +N skills symlinked · <names>` | `<scope> · -N skills removed · ~X tok` |
 
 `<scope>` is `Project scope`, or `Global scope` with `-g`. `rm` counts the skills removed from at
 least one place and sums their cost; with nothing to remove it prints `<scope> · No skills`. The
@@ -212,7 +212,7 @@ skl-x rm tdd                     # plan, Proceed? [y/n], then Clean lock? [y/n]
 skl-x rm .                       # every skill in scope
 skl-x rm . -x tdd cross-review   # every skill except the listed ones
 skl-x rm tdd -y                  # no prompts, no plan
-skl-x rm . -y -m sm              # one line: Project scope · -30 skills · ~3,333 tok
+skl-x rm . -y -m sm              # one line: Project scope · -30 skills removed · ~3,333 tok
 skl-x rm tdd --lock-only         # also --agents-only, --claude-only
 skl-x rm tdd -g                  # global scope
 ```

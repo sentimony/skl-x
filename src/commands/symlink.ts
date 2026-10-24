@@ -483,7 +483,7 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
   }
   if (mode === 'sm') {
     apply();
-    console.log(summaryLine('Symlinked', names, SCOPE));
+    console.log(summaryLine('symlinked', names, SCOPE));
     return 0;
   }
   // md and lg look the same: each link as "path -> target" was more noise than detail.
@@ -510,7 +510,7 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
   const rows = collectRows(names, roots, lockNames);
   for (const line of renderSkillTable(rows, { lockLabel: 'skills-lock.json', total: false }))
     console.log(line);
-  console.log(summaryLine('Symlinked', names, SCOPE));
+  console.log(summaryLine('symlinked', names, SCOPE));
   return 0;
 }
 
@@ -530,8 +530,8 @@ export const SLN_HELP = [
   '  -a, --agent         codex (.agents/skills), claude-code (.claude/skills) (default: both)',
   '  -y, --yes           Replace and remove existing copies without asking',
   '  -m, --mode          md (medium), lg (large, default): a "Symlinking N skills from <path>" line,',
-  '                      a table and a "Symlinked N skills · <names>" line',
-  '                      sm (small): the "Symlinked N skills · <names>" line only',
+  '                      a table and a "<scope> · +N skills symlinked · <names>" line',
+  '                      sm (small): the "<scope> · +N skills symlinked · <names>" line only',
   '',
   'EXAMPLES',
   '',

@@ -45,7 +45,7 @@ describe('skl sln', () => {
         'skill     .agents    .claude  skills-lock.json    cost',
         'tdd     symlinked  symlinked         -          ~1 tok',
         'vitest  symlinked  symlinked         -          ~2 tok',
-        'Symlinked 2 skills to Project scope · tdd vitest',
+        'Project scope · +2 skills symlinked · tdd vitest',
         '',
       ].join('\n'),
     );
@@ -63,13 +63,13 @@ describe('skl sln', () => {
         'Symlinking 1 skill from ../clone to Project scope ██████████ 100%',
         'skill     .agents    .claude  skills-lock.json    cost',
         'vitest  symlinked  symlinked         -          ~2 tok',
-        'Symlinked 1 skill to Project scope · vitest',
+        'Project scope · +1 skill symlinked · vitest',
         '',
       ].join('\n'),
     );
     const sm = run(['sln', '../clone', '-s', 'tdd', '-y', '-m', 'sm'], PROJ);
     expect(sm.exitCode).toBe(0);
-    expect(sm.stdout).toBe('Symlinked 1 skill to Project scope · tdd\n');
+    expect(sm.stdout).toBe('Project scope · +1 skill symlinked · tdd\n');
   });
 
   it('prints "No skills to symlink" alone when nothing is selected', () => {
@@ -125,7 +125,7 @@ describe('removed commands', () => {
   it('takes the skills folder itself as <path>', () => {
     const { stdout, exitCode } = run(['sln', '../clone/skills', '-s', 'vitest', '-y', '-m', 'sm'], PROJ);
     expect(exitCode).toBe(0);
-    expect(stdout).toBe('Symlinked 1 skill to Project scope · vitest\n');
+    expect(stdout).toBe('Project scope · +1 skill symlinked · vitest\n');
     expect(readlinkSync(join(PROJ, '.agents/skills/vitest'))).toBe('../../../clone/skills/vitest');
   });
 

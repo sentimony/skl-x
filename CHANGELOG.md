@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.14 (2026-10-24)
+
+### Changed
+
+- The last line of `skl add` and `skl sln` starts with the scope, like `skl rm` and `skl ls`:
+  `Project scope · +8 skills installed · <names>` and `Project scope · +2 skills symlinked · <names>`
+  instead of `Installed 8 skills to Project scope · <names>`. With nothing changed, `skl add -m sm`
+  and `-m md` print `Project scope · No skills installed`; `skl sln` with nothing selected still
+  prints `No skills to symlink in <source>.`
+- `skl rm` in `-m md` and `-m sm` prints `Project scope · -27 skills removed · ~3,608 tok`.
+- `skl update` prints `skl-x X.Y.Z is already the latest` without the trailing period.
+
 ## 0.4.13 (2026-10-24)
 
 ### Added

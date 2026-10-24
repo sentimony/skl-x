@@ -101,7 +101,7 @@ describe('skl add', () => {
         'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
         'skill           .agents    .claude  skills-lock.json    cost',
         'cross-review  universal  symlinked         -          ~4 tok',
-        'Installed 1 skill to Project scope · cross-review',
+        'Project scope · +1 skill installed · cross-review',
         '',
       ].join('\n'),
     );
@@ -145,7 +145,7 @@ describe('skl add', () => {
         'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
         'skill           .agents    .claude  skills-lock.json    cost',
         'cross-review  universal  symlinked         -          ~4 tok',
-        'Installed 1 skill to Project scope · cross-review',
+        'Project scope · +1 skill installed · cross-review',
         '',
       ].join('\n'),
     );
@@ -157,7 +157,7 @@ describe('skl add', () => {
       NPX_SEED: 'cross-review',
     });
     expect(ok.exitCode).toBe(0);
-    expect(ok.stdout).toBe('Installed 1 skill to Project scope · cross-review\n');
+    expect(ok.stdout).toBe('Project scope · +1 skill installed · cross-review\n');
     const noYes = run(['add', 'sentimony/skills', '-m', 'sm'], TMP, ENV);
     expect(noYes.exitCode).toBe(1);
     expect(noYes.stderr).toContain('--mode sm needs -y/--yes');
