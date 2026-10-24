@@ -447,13 +447,13 @@ describe('planSymlinks / runSymlink', () => {
       'Symlinked 2 skills to Project scope · cross-review tdd',
     );
     expect(console.log).toHaveBeenCalledWith(
-      'skill         .agents    .claude    skills-lock.json  cost',
+      'skill           .agents    .claude  skills-lock.json    cost',
     );
     expect(console.log).toHaveBeenCalledWith(
-      'cross-review  symlinked  symlinked  -                 ~7 tok',
+      'cross-review  symlinked  symlinked         -          ~7 tok',
     );
     expect(console.log).toHaveBeenCalledWith(
-      'tdd           symlinked  symlinked  -                 ~4 tok',
+      'tdd           symlinked  symlinked         -          ~4 tok',
     );
   });
 
@@ -512,7 +512,7 @@ describe('planSymlinks / runSymlink', () => {
     );
     expect(await runSymlink(['../clone', '-s', 'tdd', '-y'], { cwd: proj })).toBe(0);
     expect(console.log).toHaveBeenCalledWith(
-      'tdd    symlinked  symlinked  -                 ~4 tok',
+      'tdd    symlinked  symlinked         -          ~4 tok',
     );
     expect(Object.keys(readLock(join(proj, 'skills-lock.json')).skills)).toEqual(['other']);
   });
@@ -593,8 +593,8 @@ describe('planSymlinks / runSymlink', () => {
       );
       expect(logged()).toEqual([
         'Symlinking 1 skill from ../clone to Project scope ██████████ 100%',
-        'skill  .agents    .claude    skills-lock.json  cost',
-        'tdd    symlinked  symlinked  -                 ~4 tok',
+        'skill    .agents    .claude  skills-lock.json    cost',
+        'tdd    symlinked  symlinked         -          ~4 tok',
         'Symlinked 1 skill to Project scope · tdd',
       ]);
     },

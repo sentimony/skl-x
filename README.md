@@ -37,8 +37,8 @@ npx -y skl-x add sentimony/skills -s tdd -a codex claude-code -y -m sm
 
 ```text
 Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%
-skill  .agents    .claude    skills-lock.json  cost
-tdd    universal  symlinked  +                 ~125 tok
+skill    .agents    .claude  skills-lock.json      cost
+tdd    universal  symlinked         +          ~125 tok
 Installed 1 skill to Project scope · tdd
 ```
 
@@ -88,9 +88,9 @@ npx -y skl-x sln ../skills -s tdd cross-review -a claude-code
 
 ```text
 Symlinking 2 skills from ../skills to Project scope ██████████ 100%
-skill         .agents    .claude    skills-lock.json  cost
-cross-review  symlinked  symlinked  -                 ~186 tok
-tdd           symlinked  symlinked  -                 ~125 tok
+skill           .agents    .claude  skills-lock.json      cost
+cross-review  symlinked  symlinked         -          ~186 tok
+tdd           symlinked  symlinked         -          ~125 tok
 Symlinked 2 skills to Project scope · cross-review tdd
 ```
 
@@ -114,10 +114,12 @@ Symlinked 2 skills to Project scope · cross-review tdd
 | Mode | `add` | `sln` | `rm` |
 |---|---|---|---|
 | `lg` | `npx` output, then the `md` lines | as `md` | plan and summary |
-| `md` | progress line, table, `Installed N skills to <scope> · <names>` | progress line, table, `Symlinked N skills to <scope> · <names>` | `Executed A/B/C skills from <scope>` |
-| `sm` | `Installed N skills to <scope> · <names>` | `Symlinked N skills to <scope> · <names>` | `Executed A/B/C skills from <scope>` |
+| `md` | progress line, table, `Installed N skills to <scope> · <names>` | progress line, table, `Symlinked N skills to <scope> · <names>` | `<scope> · -N skills · ~X tok` |
+| `sm` | `Installed N skills to <scope> · <names>` | `Symlinked N skills to <scope> · <names>` | `<scope> · -N skills · ~X tok` |
 
-`<scope>` is `Project scope`, or `Global scope` with `-g`. In a terminal these lines are gray,
+`<scope>` is `Project scope`, or `Global scope` with `-g`. `rm` counts the skills removed from at
+least one place and sums their cost; with nothing to remove it prints `<scope> · No skills`. The
+`.agents`/`.claude`/lock breakdown is in the `lg` summary only. In a terminal these lines are gray,
 except the green bar and the skill names (cyan).
 
 ## Cost
@@ -141,10 +143,10 @@ npx -y skl-x usage -a codex --mode activations
 
 ```text
 Project scope · Usage 22 times by 7d
-skill         .agents  .claude  cost      total
-cross-review  9        2        ~186 tok  ~2,046 tok
-tdd           0        11       ~125 tok  ~1,375 tok
-2 skills      9        13       ~311 tok  ~3,421 tok
+skill         .agents  .claude      cost       total
+cross-review        9        2  ~186 tok  ~2,046 tok
+tdd                 0       11  ~125 tok  ~1,375 tok
+2 skills            9       13  ~311 tok  ~3,421 tok
 ```
 
 `.agents` counts Codex runs, `.claude` - Claude Code runs; `total` is cost × runs. A skill that
@@ -182,12 +184,12 @@ is no longer installed is shown in red with `~? tok`.
 
 ```text
 Project scope
-skill            .agents    .claude    skills-lock.json  cost
-cross-review     universal  symlinked  +                 ~186 tok
-echarts          -          copied     -                 ~98 tok
-old-skill        -          -          +                 ~? tok
-webapp-debugger  symlinked  broken     -                 ~? tok
-4 skills         2          3          2                 ~284 tok
+skill              .agents    .claude  skills-lock.json      cost
+cross-review     universal  symlinked         +          ~186 tok
+echarts                  -     copied         -           ~98 tok
+old-skill                -          -         +            ~? tok
+webapp-debugger  symlinked     broken         -            ~? tok
+4 skills                 2          3         2          ~284 tok
 ```
 
 | Cell | Meaning |
@@ -199,7 +201,9 @@ webapp-debugger  symlinked  broken     -                 ~? tok
 | `-` | not there |
 | `+` | in the lock; red when the skill is on neither disk |
 
-`skl-x ls --names` prints one name per line, for scripts and completion.
+`skl-x ls --names` prints one name per line, for scripts and completion. `skl-x ls -m sm` prints
+one line, `Project scope · 30 skills · ~3,333 tok` (`<scope> · No skills` when empty); `md` and
+`lg` print the table.
 
 ### `skl-x remove`
 
@@ -208,7 +212,7 @@ skl-x rm tdd                     # plan, Proceed? [y/n], then Clean lock? [y/n]
 skl-x rm .                       # every skill in scope
 skl-x rm . -x tdd cross-review   # every skill except the listed ones
 skl-x rm tdd -y                  # no prompts, no plan
-skl-x rm . -y -m sm              # one line: Executed A/B/C skills from Project scope
+skl-x rm . -y -m sm              # one line: Project scope · -30 skills · ~3,333 tok
 skl-x rm tdd --lock-only         # also --agents-only, --claude-only
 skl-x rm tdd -g                  # global scope
 ```

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.13 (2026-10-24)
+
+### Added
+
+- `skl ls -m sm` prints one line, `Project scope · 30 skills · ~3,333 tok`, instead of the table;
+  an empty scope gives `Project scope · No skills`. `-m md`, `-m lg` and no `-m` print the table.
+  Shell completion knows `ls -m`, `-g` and `--names`.
+
+### Changed
+
+- `skl rm` in `-m md` and `-m sm` prints `Project scope · -30 skills · ~3,333 tok` instead of
+  `Executed 30/30/24 skills from Project scope`: the skills removed from at least one place and
+  their cost, read before removal. With nothing to remove it prints `Project scope · No skills`.
+  The `.agents`/`.claude`/lock breakdown stays in the `lg` summary.
+- Tables of `ls`, `add`, `sln` and `usg` right-align counts, install cells and cost, and center
+  the `+`/`-` of the lock column; `cst` right-aligns its cost column.
+- Cost cells group thousands everywhere (`~3,333 tok`), as `usg` already did; also the `cst` total.
+
 ## 0.4.12 (2026-10-19)
 
 ### Added

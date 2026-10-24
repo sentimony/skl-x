@@ -109,9 +109,9 @@ export function readSkillCost(file: string | undefined, fallbackName: string): S
   return meta.disableModelInvocation ? 'hidden' : estimateContextTokens(meta, fallbackName);
 }
 
-export function formatCost(cost: SkillCost, grouped = false): string {
+export function formatCost(cost: SkillCost): string {
   if (cost === 'missing') return '~? tok';
   if (cost === 'no-frontmatter') return '(no frontmatter)';
   if (cost === 'hidden') return '-';
-  return `~${grouped ? cost.toLocaleString('en-US') : cost} tok`;
+  return `~${cost.toLocaleString('en-US')} tok`;
 }

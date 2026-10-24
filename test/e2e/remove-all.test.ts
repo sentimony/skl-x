@@ -22,7 +22,10 @@ describe('skl rm .', () => {
     );
     for (const name of ['foo', 'bar', 'baz']) {
       mkdirSync(join(tmp, '.claude', 'skills', name), { recursive: true });
-      writeFileSync(join(tmp, '.claude', 'skills', name, 'SKILL.md'), '---\nname: x\n---\nbody');
+      writeFileSync(
+        join(tmp, '.claude', 'skills', name, 'SKILL.md'),
+        `---\nname: x\ndescription: ${'d'.repeat(29)}\n---\nbody`,
+      );
     }
   }
 
@@ -190,12 +193,12 @@ describe('skl rm .', () => {
     expect(r.stdout.startsWith('3 skills bar baz foo removed from:\n')).toBe(true);
   });
 
-  it('-y -m sm prints a single Executed line with per-location counts', () => {
+  it('-y -m sm prints a single scope line with the removed count and cost', () => {
     seed3();
     mkdirSync(join(tmp, '.agents', 'skills', 'foo'), { recursive: true });
     const r = rmAll(['-y', '-m', 'sm']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe('Executed 1/3/3 skills from Project scope\n');
+    expect(r.stdout).toBe('Project scope · -3 skills · ~30 tok\n');
     expect(existsSync(join(tmp, '.agents', 'skills', 'foo'))).toBe(false);
     expect(existsSync(join(tmp, '.claude', 'skills', 'foo'))).toBe(false);
     const lock = JSON.parse(readFileSync(join(tmp, 'skills-lock.json'), 'utf8'));
@@ -204,9 +207,9 @@ describe('skl rm .', () => {
 
   it('--mode small and --mode=sm are the long forms of -m sm', () => {
     seed3();
-    expect(rmAll(['--yes', '--mode', 'small']).stdout).toBe('Executed 0/3/3 skills from Project scope\n');
+    expect(rmAll(['--yes', '--mode', 'small']).stdout).toBe('Project scope · -3 skills · ~30 tok\n');
     seed3();
-    expect(rmAll(['--yes', '--mode=sm']).stdout).toBe('Executed 0/3/3 skills from Project scope\n');
+    expect(rmAll(['--yes', '--mode=sm']).stdout).toBe('Project scope · -3 skills · ~30 tok\n');
   });
 
   it('-m sm without -y keeps the plan and prompts, replaces only the summary', () => {
@@ -216,14 +219,14 @@ describe('skl rm .', () => {
     expect(r.stdout).toContain('will be removed from:');
     expect(r.stdout).toContain('Proceed?');
     expect(r.stdout).not.toContain('3 skills bar baz foo removed from:');
-    expect(r.stdout.trimEnd().endsWith('Executed 0/3/0 skills from Project scope')).toBe(true);
+    expect(r.stdout.trimEnd().endsWith('Project scope · -3 skills · ~30 tok')).toBe(true);
   });
 
-  it('-m sm with --lock-only reports 0 for untouched locations', () => {
+  it('-m sm with --lock-only counts the skills removed from the lock', () => {
     seed3();
     const r = rmAll(['--lock-only', '-y', '-m', 'sm']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe('Executed 0/0/3 skills from Project scope\n');
+    expect(r.stdout).toBe('Project scope · -3 skills · ~30 tok\n');
     expect(existsSync(join(tmp, '.claude', 'skills', 'foo', 'SKILL.md'))).toBe(true);
   });
 
@@ -231,15 +234,73 @@ describe('skl rm .', () => {
     seed3();
     const r = rmAll(['-x', 'foo', '-m', 'sm', '-y']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe('Executed 0/2/2 skills from Project scope\n');
+    expect(r.stdout).toBe('Project scope · -2 skills · ~20 tok\n');
     expect(existsSync(join(tmp, '.claude', 'skills', 'foo', 'SKILL.md'))).toBe(true);
   });
 
-  it('-m md and --mode medium print the same Executed line as -m sm', () => {
+  it('-m md and --mode medium print the same scope line as -m sm', () => {
     seed3();
-    expect(rmAll(['-y', '-m', 'md']).stdout).toBe('Executed 0/3/3 skills from Project scope\n');
+    expect(rmAll(['-y', '-m', 'md']).stdout).toBe('Project scope · -3 skills · ~30 tok\n');
     seed3();
-    expect(rmAll(['-y', '--mode', 'medium']).stdout).toBe('Executed 0/3/3 skills from Project scope\n');
+    expect(rmAll(['-y', '--mode', 'medium']).stdout).toBe('Project scope · -3 skills · ~30 tok\n');
+  });
+
+  it('-m sm on an empty scope says "No skills", lg keeps "No skills to remove"', () => {
+    writeFileSync(join(tmp, 'skills-lock.json'), JSON.stringify({ skills: {} }));
+    expect(rmAll(['-y', '-m', 'sm']).stdout).toBe('Project scope · No skills\n');
+    expect(rmAll(['-y']).stdout).toContain('No skills to remove');
+  });
+
+  it('-m sm counts a repeated name once', () => {
+    seed3();
+    const r = spawnSync(process.execPath, [CLI, 'rm', 'foo', 'foo', '-y', '-m', 'sm'], {
+      cwd: tmp,
+      encoding: 'utf8',
+      env: { ...process.env, SKL_X_NO_UPDATE_CHECK: '1' },
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe('Project scope · -1 skill · ~10 tok\n');
+  });
+
+  it('-m sm reads the cost from .claude before .agents and counts lock-only and hidden skills as 0', () => {
+    writeFileSync(join(tmp, 'skills-lock.json'), JSON.stringify({ skills: { a: {}, b: {}, c: {} } }));
+    const skill = (root: string, name: string, frontmatter: string) => {
+      mkdirSync(join(tmp, root, 'skills', name), { recursive: true });
+      writeFileSync(join(tmp, root, 'skills', name, 'SKILL.md'), `---\nname: ${name}\n${frontmatter}\n---\n`);
+    };
+    skill('.claude', 'a', `description: ${'d'.repeat(29)}`);
+    skill('.agents', 'a', `description: ${'d'.repeat(59)}`);
+    skill('.agents', 'c', `description: ${'d'.repeat(29)}\ndisable-model-invocation: true`);
+    const r = rmAll(['-y', '-m', 'sm']);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe('Project scope · -3 skills · ~10 tok\n');
+  });
+
+  it('an unreadable SKILL.md does not block removal; -m sm counts its cost as 0', () => {
+    for (const args of [['-y'], ['-y', '-m', 'sm']]) {
+      writeFileSync(join(tmp, 'skills-lock.json'), JSON.stringify({ skills: { foo: {} } }));
+      // a directory named SKILL.md: existsSync passes, readFileSync throws EISDIR
+      mkdirSync(join(tmp, '.claude', 'skills', 'foo', 'SKILL.md'), { recursive: true });
+      const r = rmAll(args);
+      expect(r.status, r.stderr).toBe(0);
+      expect(existsSync(join(tmp, '.claude', 'skills', 'foo'))).toBe(false);
+      if (args.includes('sm')) expect(r.stdout).toBe('Project scope · -1 skill · ~0 tok\n');
+    }
+  });
+
+  it('-m sm with --claude-only counts only the skills removed from .claude', () => {
+    writeFileSync(join(tmp, 'skills-lock.json'), JSON.stringify({ skills: { foo: {}, bar: {} } }));
+    mkdirSync(join(tmp, '.agents', 'skills', 'foo'), { recursive: true });
+    writeFileSync(join(tmp, '.agents', 'skills', 'foo', 'SKILL.md'), '---\nname: foo\n---\n');
+    mkdirSync(join(tmp, '.claude', 'skills', 'bar'), { recursive: true });
+    writeFileSync(
+      join(tmp, '.claude', 'skills', 'bar', 'SKILL.md'),
+      `---\nname: x\ndescription: ${'d'.repeat(29)}\n---\n`,
+    );
+    const r = rmAll(['--claude-only', '-y', '-m', 'sm']);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe('Project scope · -1 skill · ~10 tok\n');
+    expect(existsSync(join(tmp, '.agents', 'skills', 'foo', 'SKILL.md'))).toBe(true);
   });
 
   it('-m lg prints the summary block as without -m', () => {

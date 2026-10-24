@@ -2,6 +2,7 @@
 import { existsSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { bold, cyan, green, red, yellow } from './ansi';
+import { scopeLabel } from './scope';
 import { formatCost, readSkillCost, type SkillCost } from './skill-files';
 
 export type Install = 'real' | 'symlink' | 'broken';
@@ -29,7 +30,7 @@ export function getInstall(root: string, name: string): Install | undefined {
 }
 
 // .claude first, as discoverSkills does; existsSync follows a symlinked skill dir
-function firstSkillFile(roots: SkillRoots, name: string): string | undefined {
+export function firstSkillFile(roots: SkillRoots, name: string): string | undefined {
   return [roots.claude, roots.agents]
     .map((root) => join(root, name, 'SKILL.md'))
     .find((p) => existsSync(p));
@@ -58,17 +59,27 @@ export interface Cell {
 
 export const plain = (text: string): Cell => ({ text, paint: (s) => s });
 
-// pad by the uncolored text so ANSI codes do not break the alignment; the last column is not padded
-export function alignCells(lines: Cell[][]): string[] {
+export type Align = 'left' | 'right' | 'center';
+
+function pad(text: string, width: number, align: Align): [string, string] {
+  const d = width - text.length;
+  if (align === 'right') return [' '.repeat(d), ''];
+  if (align === 'center') return [' '.repeat(Math.floor(d / 2)), ' '.repeat(d - Math.floor(d / 2))];
+  return ['', ' '.repeat(d)];
+}
+
+// pad by the uncolored text so ANSI codes do not break the alignment; a column without align is left
+export function alignCells(lines: Cell[][], align: Align[] = []): string[] {
   const cols = Math.max(...lines.map((l) => l.length));
   const widths = Array.from({ length: cols }, (_, i) =>
     Math.max(...lines.map((l) => l[i]?.text.length ?? 0)),
   );
   return lines.map((cells) =>
     cells
-      .map(
-        (c, i) => c.paint(c.text) + ' '.repeat(i < cols - 1 ? (widths[i] ?? 0) - c.text.length : 0),
-      )
+      .map((c, i) => {
+        const [left, right] = pad(c.text, widths[i] ?? 0, align[i] ?? 'left');
+        return left + c.paint(c.text) + right;
+      })
       .join('  ')
       .trimEnd(),
   );
@@ -84,6 +95,18 @@ function installCell(install: Install | undefined, realLabel: string): Cell {
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
+// "Project scope · -30 skills · ~3,333 tok"; the sm line of skl rm (sign '-') and skl ls
+export function scopeTotalLine(
+  isGlobal: boolean,
+  skills: number,
+  cost: number,
+  sign: '' | '-' = '',
+): string {
+  const scope = scopeLabel(isGlobal);
+  if (skills === 0) return `${scope} · No skills`;
+  return `${scope} · ${sign}${plural(skills, 'skill')} · ${formatCost(cost)}`;
 }
 
 export function renderSkillTable(
@@ -118,5 +141,5 @@ export function renderSkillTable(
       plain(formatCost(rows.reduce((n, r) => n + (typeof r.cost === 'number' ? r.cost : 0), 0))),
     ]);
   }
-  return alignCells(lines);
+  return alignCells(lines, ['left', 'right', 'right', 'center', 'right']);
 }

@@ -169,8 +169,7 @@ describe('readSkillCost', () => {
 describe('formatCost', () => {
   it('formats every cost kind as skl cost does', () => {
     expect(formatCost(262)).toBe('~262 tok');
-    expect(formatCost(2882)).toBe('~2882 tok');
-    expect(formatCost(2882, true)).toBe('~2,882 tok');
+    expect(formatCost(2882)).toBe('~2,882 tok');
     expect(formatCost('missing')).toBe('~? tok');
     expect(formatCost('no-frontmatter')).toBe('(no frontmatter)');
     expect(formatCost('hidden')).toBe('-');
