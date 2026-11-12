@@ -226,7 +226,7 @@ describe('planSymlinks / runSymlink', () => {
       'Symlinking 2 skills from ../clone to Project scope ██████████ 100%',
     );
     expect(console.log).toHaveBeenCalledWith(
-      'Project scope · +2 skills symlinked · tdd cross-review',
+      'Project scope · +2 skills symlinked · tdd · cross-review',
     );
   });
 
@@ -444,7 +444,7 @@ describe('planSymlinks / runSymlink', () => {
       'Symlinking 2 skills from ../clone to Project scope ██████████ 100%',
     );
     expect(console.log).toHaveBeenCalledWith(
-      'Project scope · +2 skills symlinked · cross-review tdd',
+      'Project scope · +2 skills symlinked · cross-review · tdd',
     );
     expect(console.log).toHaveBeenCalledWith(
       'skill           .agents    .claude  skills-lock.json    cost',
@@ -602,7 +602,7 @@ describe('planSymlinks / runSymlink', () => {
 
   it('runSln --mode small prints the summary only and still links', async () => {
     expect(await runSln(['../clone', '--mode', 'small', '-y'], { cwd: proj })).toBe(0);
-    expect(logged()).toEqual(['Project scope · +2 skills symlinked · cross-review tdd']);
+    expect(logged()).toEqual(['Project scope · +2 skills symlinked · cross-review · tdd']);
     expect(lstatSync(join(proj, '.claude/skills/tdd')).isSymbolicLink()).toBe(true);
   });
 

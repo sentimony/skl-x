@@ -1,9 +1,15 @@
 // src/utils/skill-table.ts
-import { existsSync, lstatSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { bold, cyan, green, red, yellow } from './ansi';
 import { scopeLabel } from './scope';
-import { formatCost, readSkillCost, type SkillCost } from './skill-files';
+import {
+  extractFrontmatter,
+  formatCost,
+  parseSkillMeta,
+  readSkillCost,
+  type SkillCost,
+} from './skill-files';
 
 export type Install = 'real' | 'symlink' | 'broken';
 
@@ -34,6 +40,21 @@ export function firstSkillFile(roots: SkillRoots, name: string): string | undefi
   return [roots.claude, roots.agents]
     .map((root) => join(root, name, 'SKILL.md'))
     .find((p) => existsSync(p));
+}
+
+// metadata.version of each installed SKILL.md; skills without one are left out
+export function readSkillVersions(roots: SkillRoots, names: string[]): Map<string, string> {
+  const versions = new Map<string, string>();
+  for (const name of names) {
+    const file = firstSkillFile(roots, name);
+    if (file === undefined) continue;
+    try {
+      const fm = extractFrontmatter(readFileSync(file, 'utf8'));
+      const version = fm === undefined ? undefined : parseSkillMeta(fm).version;
+      if (version) versions.set(name, version);
+    } catch {}
+  }
+  return versions;
 }
 
 export function collectRows(

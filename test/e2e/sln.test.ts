@@ -16,9 +16,10 @@ import { run } from './helpers';
 let TMP = '';
 let PROJ = '';
 
-function seedSkill(root: string, name: string, internal = false): void {
+function seedSkill(root: string, name: string, internal = false, version = ''): void {
   mkdirSync(join(root, 'skills', name), { recursive: true });
-  const meta = internal ? 'metadata:\n  internal: true\n' : '';
+  const lines = [internal ? '  internal: true\n' : '', version ? `  version: ${version}\n` : ''];
+  const meta = internal || version ? `metadata:\n${lines.join('')}` : '';
   writeFileSync(join(root, 'skills', name, 'SKILL.md'), `---\nname: ${name}\n${meta}---\n`);
 }
 
@@ -27,7 +28,7 @@ beforeEach(() => {
   PROJ = join(TMP, 'proj');
   const clone = join(TMP, 'clone');
   seedSkill(clone, 'tdd');
-  seedSkill(clone, 'vitest');
+  seedSkill(clone, 'vitest', false, '0.0.2');
   seedSkill(clone, 'hidden', true);
   mkdirSync(join(PROJ, '.agents/skills/tdd'), { recursive: true });
   writeFileSync(join(PROJ, '.agents/skills/tdd/SKILL.md'), 'copy from npx skills add');
@@ -45,7 +46,7 @@ describe('skl sln', () => {
         'skill     .agents    .claude  skills-lock.json    cost',
         'tdd     symlinked  symlinked         -          ~1 tok',
         'vitest  symlinked  symlinked         -          ~2 tok',
-        'Project scope · +2 skills symlinked · tdd vitest',
+        'Project scope · +2 skills symlinked · tdd · vitest 0.0.2',
         '',
       ].join('\n'),
     );
@@ -63,7 +64,7 @@ describe('skl sln', () => {
         'Symlinking 1 skill from ../clone to Project scope ██████████ 100%',
         'skill     .agents    .claude  skills-lock.json    cost',
         'vitest  symlinked  symlinked         -          ~2 tok',
-        'Project scope · +1 skill symlinked · vitest',
+        'Project scope · +1 skill symlinked · vitest 0.0.2',
         '',
       ].join('\n'),
     );
@@ -125,7 +126,7 @@ describe('removed commands', () => {
   it('takes the skills folder itself as <path>', () => {
     const { stdout, exitCode } = run(['sln', '../clone/skills', '-s', 'vitest', '-y', '-m', 'sm'], PROJ);
     expect(exitCode).toBe(0);
-    expect(stdout).toBe('Project scope · +1 skill symlinked · vitest\n');
+    expect(stdout).toBe('Project scope · +1 skill symlinked · vitest 0.0.2\n');
     expect(readlinkSync(join(PROJ, '.agents/skills/vitest'))).toBe('../../../clone/skills/vitest');
   });
 

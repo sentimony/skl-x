@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setColorEnabled } from '../utils/ansi';
 import type { SpawnOutcome } from './add';
 import { runUpdate, UPDATE_HELP } from './update';
 
@@ -15,7 +16,10 @@ beforeEach(() => {
     err.push(s);
   });
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  setColorEnabled(false);
+});
 
 function deps(over: Partial<Parameters<typeof runUpdate>[1]> = {}) {
   const calls: { command: string; args: string[] }[] = [];
@@ -75,6 +79,32 @@ describe('runUpdate', () => {
     expect(d.saved).toEqual([]);
   });
 
+  it('prints the already-the-latest line in gray with color, plain without', async () => {
+    setColorEnabled(true);
+    await runUpdate([], deps({ latest: async () => '0.4.10' }).deps);
+    expect(out).toEqual(['\x1b[90mskl-x 0.4.10 is already the latest\x1b[0m']);
+  });
+
+  it('prints the npx lines in gray with color', async () => {
+    setColorEnabled(true);
+    await runUpdate([], deps({ install: () => 'npx' }).deps);
+    await runUpdate([], deps({ install: () => 'npx', latest: async () => '0.4.10' }).deps);
+    expect(out).toEqual([
+      '\x1b[90mskl-x 0.4.10 runs through npx; the latest is 0.4.11: npx -y --prefer-online skl-x\x1b[0m',
+      '\x1b[90mskl-x 0.4.10 runs through npx, which takes the latest version: npx -y --prefer-online skl-x\x1b[0m',
+    ]);
+  });
+
+  it('keeps the real update lines uncolored', async () => {
+    setColorEnabled(true);
+    await runUpdate([], deps().deps);
+    expect(out).toEqual([
+      'Updating skl-x via `npm i -g skl-x@0.4.11`...',
+      '==> Updating skl-x from 0.4.10 to 0.4.11',
+      'skl-x 0.4.11 installed successfully.',
+    ]);
+  });
+
   it('under npx installs nothing and names the running version', async () => {
     const d = deps({ install: () => 'npx', version: '0.4.11' });
     expect(await runUpdate([], d.deps)).toBe(0);
@@ -102,10 +132,11 @@ describe('runUpdate', () => {
     ]);
   });
 
-  it('from a local copy exits 1, names its folder and asks no registry', async () => {
+  it('from a local copy exits 0, names its folder and asks no registry', async () => {
     const latest = vi.fn(async () => '0.4.11');
     const d = deps({ install: () => 'local', latest, cliPath: '/work/skl-x/dist/cli.js' });
-    expect(await runUpdate([], d.deps)).toBe(1);
+    expect(await runUpdate([], d.deps)).toBe(0);
+    expect(out).toEqual([]);
     expect(err.join('\n')).toContain('skl-x runs from /work/skl-x, not from a global npm install');
     expect(latest).not.toHaveBeenCalled();
     expect(d.calls).toEqual([]);

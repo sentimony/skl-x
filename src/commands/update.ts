@@ -1,4 +1,5 @@
 import { dirname } from 'node:path';
+import { gray } from '../utils/ansi';
 import {
   compareVersions,
   detectInstall,
@@ -27,7 +28,7 @@ export interface UpdateDeps {
 
 export const UPDATE_HELP = [
   'Install the latest skl-x from npm globally (npm i -g skl-x@<latest>).',
-  'Only a global npm install is updated: under npx nothing is installed, a local copy exits 1.',
+  'Only a global npm install is updated: under npx or from a local copy nothing is installed (a local copy says so on stderr, exit 0).',
   '',
   'USAGE skl-x update',
   '       skl-x up',
@@ -50,16 +51,19 @@ export async function runUpdate(argv: string[], deps: UpdateDeps): Promise<numbe
   const cliPath = deps.cliPath ?? process.argv[1] ?? '';
   const install = (deps.install ?? (() => detectInstall(cliPath)))();
   if (install === 'local') {
+    // exit 0: a script under `set -e` that runs `skl update` first must not stop here
     console.error(`${PREFIX}: ${localCopyMessage(cliPath)}; update that copy by hand`);
-    return 1;
+    return 0;
   }
   const latest = await (deps.latest ?? fetchLatest)();
   if (install === 'npx') {
     // without --prefer-online npx may run an older copy from its cache
     console.log(
-      latest && compareVersions(latest, deps.version) > 0
-        ? `skl-x ${deps.version} runs through npx; the latest is ${latest}: ${NPX_LATEST}`
-        : `skl-x ${deps.version} runs through npx, which takes the latest version: ${NPX_LATEST}`,
+      gray(
+        latest && compareVersions(latest, deps.version) > 0
+          ? `skl-x ${deps.version} runs through npx; the latest is ${latest}: ${NPX_LATEST}`
+          : `skl-x ${deps.version} runs through npx, which takes the latest version: ${NPX_LATEST}`,
+      ),
     );
     return 0;
   }
@@ -71,7 +75,7 @@ export async function runUpdate(argv: string[], deps: UpdateDeps): Promise<numbe
     deps.saveLatest ?? ((v: string) => writeCache({ checkedAt: Date.now(), latest: v }));
   if (compareVersions(latest, deps.version) <= 0) {
     saveLatest(latest);
-    console.log(`skl-x ${deps.version} is already the latest`);
+    console.log(gray(`skl-x ${deps.version} is already the latest`));
     return 0;
   }
   const args = ['i', '-g', `skl-x@${latest}`];

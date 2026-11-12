@@ -39,6 +39,15 @@ describe('parseSkillMeta', () => {
     expect(parseSkillMeta('name: a\ninternal: true').internal).toBe(false);
     expect(parseSkillMeta('name: a').internal).toBe(false);
   });
+  it('reads metadata.version, quoted or not, and skips it when absent', () => {
+    const fm = (v: string) => `name: a\nmetadata:\n  author: x\n  version: ${v}\nlicense: MIT`;
+    expect(parseSkillMeta(fm('0.0.2')).version).toBe('0.0.2');
+    expect(parseSkillMeta(fm('"1.2.3"')).version).toBe('1.2.3');
+    expect(parseSkillMeta(fm("'1.2' # c")).version).toBe('1.2');
+    expect(parseSkillMeta(fm('0.9.96 # pinned')).version).toBe('0.9.96');
+    expect(parseSkillMeta('name: a\nversion: 1.0.0').version).toBeUndefined();
+    expect(parseSkillMeta('name: a\nmetadata:\n  internal: true').version).toBeUndefined();
+  });
   it('reads single-line name and description', () => {
     expect(parseSkillMeta('name: foo\ndescription: Does foo.')).toEqual({
       name: 'foo',

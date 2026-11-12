@@ -9,7 +9,12 @@ import { rmSkillDir } from '../utils/fs-rm';
 import { extractMode } from '../utils/mode';
 import { createProgress, renderBar } from '../utils/progress';
 import { scopeLabel } from '../utils/scope';
-import { collectRows, renderSkillTable, type SkillRoots } from '../utils/skill-table';
+import {
+  collectRows,
+  readSkillVersions,
+  renderSkillTable,
+  type SkillRoots,
+} from '../utils/skill-table';
 
 export interface SpawnOutcome {
   status: number | null;
@@ -86,6 +91,7 @@ export const ADD_HELP = [
   '                      md (medium): a progress line, a table of the changed skills and',
   '                      a "<scope> · +N skills installed · <names>" line',
   '                      sm (small): the "<scope> · +N skills installed · <names>" line only',
+  '                      <names> are separated by " · ", each followed by its metadata.version',
   '',
   'EXAMPLES',
   '',
@@ -99,11 +105,21 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
 
-// "Project scope · +2 skills installed · tdd vitest"; the last line of every mode
-export function summaryLine(verb: string, names: string[], scope: string): string {
+// "Project scope · +2 skills installed · tdd 0.0.2 · vitest"; the last line of every mode.
+// A skill with metadata.version shows it after the name; the skills are split by a gray " · "
+export function summaryLine(
+  verb: string,
+  names: string[],
+  scope: string,
+  versions: ReadonlyMap<string, string> = new Map(),
+): string {
   if (names.length === 0) return gray(`${scope} · No skills ${verb}`);
   const count = gray(`${scope} · +${plural(names.length, 'skill')} ${verb}`);
-  return `${count} ${gray('·')} ${cyan(names.join(' '))}`;
+  const skills = names.map((n) => {
+    const v = versions.get(n);
+    return cyan(v ? `${n} ${v}` : n);
+  });
+  return `${count} ${gray('·')} ${skills.join(gray(' · '))}`;
 }
 
 // "Installing 2 skills from <source> to Project scope"; without a count while the total is unknown
@@ -346,7 +362,9 @@ async function runMd(
   }
   await progress.done(installingLabel(from, requested?.length ?? changed.length, scope.label));
   printTable(scope, changed);
-  console.log(summaryLine('installed', changed, scope.label));
+  console.log(
+    summaryLine('installed', changed, scope.label, readSkillVersions(scope.roots, changed)),
+  );
   return 0;
 }
 
@@ -375,7 +393,9 @@ async function runLg(args: string[], spawn: Spawner, scope: AddScope): Promise<n
       `${gray(installingLabel(from, requested?.length ?? changed.length, scope.label))} ${renderBar(1)}`,
     );
     printTable(scope, changed);
-    console.log(summaryLine('installed', changed, scope.label));
+    console.log(
+      summaryLine('installed', changed, scope.label, readSkillVersions(scope.roots, changed)),
+    );
   } catch {}
   return 0;
 }
@@ -388,7 +408,9 @@ async function runSm(args: string[], spawn: Spawner, scope: AddScope): Promise<n
   const changed = changedSince(scope, before);
   if (reportMissing(removeLeftovers(scope, entries, changed, agentRoots(args, scope.roots))))
     return 1;
-  console.log(summaryLine('installed', changed, scope.label));
+  console.log(
+    summaryLine('installed', changed, scope.label, readSkillVersions(scope.roots, changed)),
+  );
   return 0;
 }
 

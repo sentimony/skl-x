@@ -18,7 +18,7 @@ import { extractMode, type OutputMode } from '../utils/mode';
 import { createProgress } from '../utils/progress';
 import { scopeLabel } from '../utils/scope';
 import { extractFrontmatter, parseSkillMeta } from '../utils/skill-files';
-import { collectRows, renderSkillTable } from '../utils/skill-table';
+import { collectRows, readSkillVersions, renderSkillTable } from '../utils/skill-table';
 import { summaryLine } from './add';
 
 export type Agent = 'codex' | 'claude-code';
@@ -481,9 +481,13 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
     console.log(`No skills to symlink in ${source}.`);
     return 0;
   }
+  const roots = {
+    agents: join(cwd, AGENT_DIRS.codex),
+    claude: join(cwd, AGENT_DIRS['claude-code']),
+  };
   if (mode === 'sm') {
     apply();
-    console.log(summaryLine('symlinked', names, SCOPE));
+    console.log(summaryLine('symlinked', names, SCOPE, readSkillVersions(roots, names)));
     return 0;
   }
   // md and lg look the same: each link as "path -> target" was more noise than detail.
@@ -502,15 +506,11 @@ export async function runSymlink(argv: string[], deps: SymlinkDeps = {}): Promis
   }
   await progress.filled();
   await progress.done();
-  const roots = {
-    agents: join(cwd, AGENT_DIRS.codex),
-    claude: join(cwd, AGENT_DIRS['claude-code']),
-  };
   const lockNames = new Set(Object.keys(readLock(lockPath).skills));
   const rows = collectRows(names, roots, lockNames);
   for (const line of renderSkillTable(rows, { lockLabel: 'skills-lock.json', total: false }))
     console.log(line);
-  console.log(summaryLine('symlinked', names, SCOPE));
+  console.log(summaryLine('symlinked', names, SCOPE, readSkillVersions(roots, names)));
   return 0;
 }
 
@@ -532,6 +532,7 @@ export const SLN_HELP = [
   '  -m, --mode          md (medium), lg (large, default): a "Symlinking N skills from <path>" line,',
   '                      a table and a "<scope> · +N skills symlinked · <names>" line',
   '                      sm (small): the "<scope> · +N skills symlinked · <names>" line only',
+  '                      <names> are separated by " · ", each followed by its metadata.version',
   '',
   'EXAMPLES',
   '',
