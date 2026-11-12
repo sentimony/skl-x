@@ -38,8 +38,8 @@ npx -y skl-x add sentimony/skills -s tdd -a codex claude-code -y -m sm
 ```text
 Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%
 skill    .agents    .claude  skills-lock.json      cost
-tdd    universal  symlinked         +          ~125 tok
-Project scope · +1 skill installed · tdd
+tdd    universal  symlinked         +          ~104 tok
+Project scope · +1 skill installed · tdd 0.0.16
 ```
 
 Without `-m` (`lg`), the `npx skills add` output is shown as is, followed by the same lines when
