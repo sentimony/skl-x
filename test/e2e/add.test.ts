@@ -22,6 +22,9 @@ beforeEach(() => {
       'if [ -n "$NPX_SEED" ]; then',
       '  mkdir -p ".agents/skills/$NPX_SEED" .claude/skills',
       '  printf -- "---\\nname: %s\\n---\\n" "$NPX_SEED" > ".agents/skills/$NPX_SEED/SKILL.md"',
+      '  if [ -n "$NPX_VERSION" ]; then',
+      '    printf -- "---\\nname: %s\\nmetadata:\\n  version: %s\\n---\\n" "$NPX_SEED" "$NPX_VERSION" > ".agents/skills/$NPX_SEED/SKILL.md"',
+      '  fi',
       '  ln -s "../../.agents/skills/$NPX_SEED" ".claude/skills/$NPX_SEED"',
       '  exit 0',
       'fi',
@@ -87,6 +90,16 @@ describe('skl add', () => {
     const b = run(['usage', '--since', 'sln'], TMP, ENV);
     expect(existsSync(ARGS_FILE)).toBe(false);
     for (const r of [a, b]) expect(r.stderr).not.toMatch(/skl (add|sln)|Unknown option/);
+  });
+
+  it('-m sm shows metadata.version after the skill name', () => {
+    const { stdout, exitCode } = run(
+      ['add', 'sentimony/skills', '-s', 'cross-review', '-a', 'codex', 'claude-code', '-y', '-m', 'sm'],
+      TMP,
+      { ...ENV, NPX_SEED: 'cross-review', NPX_VERSION: '0.9.96' },
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe('Project scope · +1 skill installed · cross-review 0.9.96\n');
   });
 
   it('-m md hides the npx output and prints the progress line, a table and a summary', () => {

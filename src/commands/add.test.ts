@@ -387,7 +387,35 @@ describe('summaryLine', () => {
     expect(summaryLine('installed', [], 'Global scope')).toBe('Global scope · No skills installed');
     setColorEnabled(true);
     expect(summaryLine('installed', ['tdd', 'vitest'], 'Project scope')).toBe(
-      '\x1b[90mProject scope · +2 skills installed\x1b[0m \x1b[90m·\x1b[0m \x1b[36mtdd vitest\x1b[0m',
+      '\x1b[90mProject scope · +2 skills installed\x1b[0m \x1b[90m·\x1b[0m \x1b[36mtdd\x1b[0m\x1b[90m · \x1b[0m\x1b[36mvitest\x1b[0m',
+    );
+  });
+
+  it('splits skills with " · " and adds metadata.version after the name', () => {
+    const v = new Map([
+      ['fdb', '0.0.2'],
+      ['skill-tuning', '0.0.1'],
+    ]);
+    expect(summaryLine('symlinked', ['fdb', 'skill-tuning'], 'Project scope', v)).toBe(
+      'Project scope · +2 skills symlinked · fdb 0.0.2 · skill-tuning 0.0.1',
+    );
+    expect(
+      summaryLine(
+        'installed',
+        ['fdb', 'graphify'],
+        'Project scope',
+        new Map([['graphify', '0.9.96']]),
+      ),
+    ).toBe('Project scope · +2 skills installed · fdb · graphify 0.9.96');
+    expect(summaryLine('installed', ['a', 'b'], 'Project scope')).toBe(
+      'Project scope · +2 skills installed · a · b',
+    );
+  });
+
+  it('paints a skill with its version cyan and the separator gray', () => {
+    setColorEnabled(true);
+    expect(summaryLine('installed', ['a', 'b'], 'Project scope', new Map([['b', '1.0.0']]))).toBe(
+      '\x1b[90mProject scope · +2 skills installed\x1b[0m \x1b[90m·\x1b[0m \x1b[36ma\x1b[0m\x1b[90m · \x1b[0m\x1b[36mb 1.0.0\x1b[0m',
     );
   });
 });

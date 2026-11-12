@@ -4,7 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setColorEnabled } from './ansi';
-import { collectRows, renderSkillTable, type SkillRow, scopeTotalLine } from './skill-table';
+import {
+  collectRows,
+  readSkillVersions,
+  renderSkillTable,
+  type SkillRow,
+  scopeTotalLine,
+} from './skill-table';
 
 const ROWS: SkillRow[] = [
   { name: 'cross-review', agents: 'real', claude: 'symlink', inLock: true, cost: 262 },
@@ -91,6 +97,27 @@ describe('scopeTotalLine', () => {
 
   it('says "No skills" for zero', () => {
     expect(scopeTotalLine(true, 0, 0, '-')).toBe('Global scope · No skills');
+  });
+});
+
+describe('readSkillVersions', () => {
+  let tmp = '';
+  afterEach(() => rmSync(tmp, { recursive: true, force: true }));
+
+  it('reads metadata.version and leaves out skills without one or without a file', () => {
+    tmp = mkdtempSync(join(tmpdir(), 'skl-table-'));
+    const agents = join(tmp, '.agents', 'skills');
+    const claude = join(tmp, '.claude', 'skills');
+    const seed = (name: string, fm: string) => {
+      mkdirSync(join(agents, name), { recursive: true });
+      writeFileSync(join(agents, name, 'SKILL.md'), `---\nname: ${name}\n${fm}---\n`);
+    };
+    seed('a', 'metadata:\n  version: 1.2.3\n');
+    seed('b', '');
+    seed('c', 'version: 9.9.9\n');
+    expect(readSkillVersions({ agents, claude }, ['a', 'b', 'c', 'gone'])).toEqual(
+      new Map([['a', '1.2.3']]),
+    );
   });
 });
 

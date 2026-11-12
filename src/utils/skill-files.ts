@@ -12,6 +12,8 @@ export interface SkillMeta {
   disableModelInvocation: boolean;
   // metadata.internal: true hides a skill from `npx skills add` without -s
   internal: boolean;
+  // metadata.version
+  version?: string;
 }
 
 export function getSkillPathCandidates(
@@ -49,6 +51,15 @@ function unquote(value: string): string {
   return m?.[2] ?? value;
 }
 
+function metadataVersion(lines: string[]): string | undefined {
+  for (const l of lines) {
+    const m = l.match(/^version:\s*(?:"([^"]*)"|'([^']*)'|([^\s#][^#]*?))\s*(?:\s#.*)?$/);
+    const v = (m?.[1] ?? m?.[2] ?? m?.[3])?.trim();
+    if (v) return v;
+  }
+  return undefined;
+}
+
 // Minimal YAML reader for top-level scalar keys only (zero-dep by design):
 // column-0 `key: value`, indented continuation lines, `>`/`|` block indicators.
 export function parseSkillMeta(frontmatter: string): SkillMeta {
@@ -80,6 +91,7 @@ export function parseSkillMeta(frontmatter: string): SkillMeta {
     internal: (fields.get('metadata') ?? []).some((l) =>
       /^internal:\s*(["']?)true\1(?:\s+#.*)?$/.test(l),
     ),
+    version: metadataVersion(fields.get('metadata') ?? []),
   };
 }
 

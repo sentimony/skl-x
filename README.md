@@ -91,8 +91,12 @@ Symlinking 2 skills from ../skills to Project scope █████████�
 skill           .agents    .claude  skills-lock.json      cost
 cross-review  symlinked  symlinked         -          ~186 tok
 tdd           symlinked  symlinked         -          ~125 tok
-Project scope · +2 skills symlinked · cross-review tdd
+Project scope · +2 skills symlinked · cross-review 0.0.2 · tdd
 ```
+
+In the last line of `add` and `sln` the skills are separated by ` · `, and a skill that has
+`metadata.version` in its `SKILL.md` shows it after the name (`cross-review 0.0.2 · tdd`).
+`ls -m sm` does not show versions.
 
 - Without `-s`, every `<path>/skills/<name>/SKILL.md` is linked (or `<path>/<name>/SKILL.md`
   when `<path>/skills` has no skills), except skills with

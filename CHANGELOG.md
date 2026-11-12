@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.15 (2026-11-12)
+
+### Changed
+
+- The last line of `skl add` and `skl sln` separates the skills with ` · ` (gray) instead of a
+  space and shows a skill's `metadata.version` after its name when the installed `SKILL.md` has
+  one: `Project scope · +2 skills symlinked · fdb 0.0.2 · skill-tuning`. `skl ls -m sm` is unchanged.
+- `skl update` from a local copy (`node_modules`, a clone) exits 0 instead of 1; the message "skl-x
+  runs from <folder>, not from a global npm install; update that copy by hand" stays on stderr, so a
+  `set -e` script that runs `skl update` first is not stopped. No `--strict` flag. `skl uninstall`
+  from a local copy still exits 1.
+- `skl update` prints `skl-x X.Y.Z is already the latest` and the two `runs through npx` lines in
+  gray, like the scope lines of `add`, `sln`, `rm` and `ls`. Without color the text is the same.
+
 ## 0.4.14 (2026-10-24)
 
 ### Changed

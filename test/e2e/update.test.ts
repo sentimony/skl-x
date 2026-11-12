@@ -7,9 +7,9 @@ import { run } from './helpers';
 
 // dist/cli.js of the clone is a local copy: update exits before any network call.
 describe('skl update', () => {
-  it.each(['update', 'up'])('%s from a local copy exits 1 and installs nothing', (cmd) => {
+  it.each(['update', 'up'])('%s from a local copy exits 0 and installs nothing', (cmd) => {
     const r = run([cmd]);
-    expect(r.exitCode).toBe(1);
+    expect(r.exitCode).toBe(0);
     expect(r.stdout).toBe('');
     expect(r.stderr).toContain(`skl-x runs from ${process.cwd()}, not from a global npm install`);
   });
