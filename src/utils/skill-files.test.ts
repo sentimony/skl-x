@@ -1,14 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
-  countFrontmatterTokens,
   estimateContextTokens,
   extractFrontmatter,
-  findSkillFile,
   formatCost,
-  getSkillPathCandidates,
   parseSkillMeta,
   readSkillCost,
 } from './skill-files';
@@ -96,47 +93,6 @@ describe('estimateContextTokens', () => {
   it('ignores fields other than name and description', () => {
     const fm = 'name: foo\ndescription: Does foo.\ncompatibility: a very long field value';
     expect(estimateContextTokens(parseSkillMeta(fm), 'foo')).toBe(4);
-  });
-});
-
-describe('getSkillPathCandidates', () => {
-  it('returns single local path next to lock file', () => {
-    const paths = getSkillPathCandidates('foo', '/repo/skills-lock.json', false);
-    expect(paths).toEqual(['/repo/.claude/skills/foo/SKILL.md']);
-  });
-  it('returns global candidates when isGlobal=true', () => {
-    const paths = getSkillPathCandidates('foo', '/anywhere/.skill-lock.json', true);
-    expect(paths.length).toBe(2);
-    expect(paths[0]).toContain('.claude/skills/foo/SKILL.md');
-    expect(paths[1]).toContain('.agents/skills/foo/SKILL.md');
-  });
-});
-
-describe('findSkillFile + countFrontmatterTokens', () => {
-  let TMP = '';
-  beforeEach(() => {
-    TMP = join(tmpdir(), `skl-x-skf-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    mkdirSync(join(TMP, '.claude', 'skills', 'present'), { recursive: true });
-    writeFileSync(
-      join(TMP, '.claude', 'skills', 'present', 'SKILL.md'),
-      '---\nname: present\ndescription: hi\n---\n\n# Body\n',
-    );
-    writeFileSync(join(TMP, 'skills-lock.json'), '{}');
-  });
-  afterEach(() => rmSync(TMP, { recursive: true, force: true }));
-
-  it('finds an existing skill file', () => {
-    const f = findSkillFile('present', join(TMP, 'skills-lock.json'), false);
-    expect(f).toContain('present/SKILL.md');
-  });
-  it('returns undefined for missing skill', () => {
-    const f = findSkillFile('absent', join(TMP, 'skills-lock.json'), false);
-    expect(f).toBeUndefined();
-  });
-  it('counts context tokens from name + description', () => {
-    const f = findSkillFile('present', join(TMP, 'skills-lock.json'), false);
-    // 'present' + 'hi' = 9 chars -> 3 tokens
-    expect(countFrontmatterTokens(f as string)).toBe(3);
   });
 });
 

@@ -1,6 +1,4 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
 
 // Calibrated against Claude Code `/skills`: name + description at 3 chars/token
 // matches per skill; whole-frontmatter at 4 chars/token matched only in sum.
@@ -14,31 +12,6 @@ export interface SkillMeta {
   internal: boolean;
   // metadata.version
   version?: string;
-}
-
-export function getSkillPathCandidates(
-  name: string,
-  lockPath: string,
-  isGlobal: boolean,
-): string[] {
-  if (isGlobal) {
-    return [
-      join(homedir(), '.claude', 'skills', name, 'SKILL.md'),
-      join(homedir(), '.agents', 'skills', name, 'SKILL.md'),
-    ];
-  }
-  return [join(dirname(resolve(lockPath)), '.claude', 'skills', name, 'SKILL.md')];
-}
-
-export function findSkillFile(
-  name: string,
-  lockPath: string,
-  isGlobal: boolean,
-): string | undefined {
-  for (const p of getSkillPathCandidates(name, lockPath, isGlobal)) {
-    if (existsSync(p)) return p;
-  }
-  return undefined;
 }
 
 export function extractFrontmatter(content: string): string | undefined {
@@ -101,13 +74,6 @@ export function estimateContextTokens(
 ): number {
   const chars = (meta.name ?? fallbackName).length + (meta.description ?? '').length;
   return Math.round(chars / CHARS_PER_TOKEN);
-}
-
-export function countFrontmatterTokens(filePath: string): number | undefined {
-  const content = readFileSync(filePath, 'utf8');
-  const fm = extractFrontmatter(content);
-  if (fm === undefined) return undefined;
-  return estimateContextTokens(parseSkillMeta(fm), basename(dirname(filePath)));
 }
 
 // number - tokens in the always-loaded context; 'hidden' - disable-model-invocation keeps it out
