@@ -107,7 +107,7 @@ function plural(n: number, word: string): string {
 
 // "Project scope · +2 skills installed · tdd ⁰·⁰·² · vitest"; the last line of every mode.
 // A skill with metadata.version shows it after the name; the skills are split by a gray " · "
-// Use superscript digits in terminals and keep the original version in redirected output.
+// Only numeric dotted versions become superscripts in terminals; preserve other version text.
 export function summaryLine(
   verb: string,
   names: string[],
@@ -118,9 +118,10 @@ export function summaryLine(
   const count = gray(`${scope} · +${plural(names.length, 'skill')} ${verb}`);
   const skills = names.map((n) => {
     const v = versions.get(n);
-    const version = process.stdout.isTTY
-      ? v?.replace(/[0-9.]/g, (c) => (c === '.' ? '·' : '⁰¹²³⁴⁵⁶⁷⁸⁹'.charAt(Number(c))))
-      : v;
+    const version =
+      process.stdout.isTTY && v && /^\d+(\.\d+)*$/.test(v)
+        ? v.replace(/[0-9.]/g, (c) => (c === '.' ? '·' : '⁰¹²³⁴⁵⁶⁷⁸⁹'.charAt(Number(c))))
+        : v;
     return cyan(version ? `${n} ${version}` : n);
   });
   return `${count} ${gray('·')} ${skills.join(gray(' · '))}`;

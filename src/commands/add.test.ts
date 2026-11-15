@@ -401,6 +401,11 @@ describe('summaryLine', () => {
         );
       }
       expect(versions.get('cross-agent')).toBe('0.0.11');
+      for (const version of ['1.0.0-beta.1', '1.2.3+build.4', 'v1.2.3', 'draft']) {
+        expect(
+          summaryLine('installed', ['custom'], 'Project scope', new Map([['custom', version]])),
+        ).toBe(`Project scope · +1 skill installed · custom ${version}`);
+      }
     } finally {
       if (tty) Object.defineProperty(process.stdout, 'isTTY', tty);
       else delete (process.stdout as { isTTY?: boolean }).isTTY;
