@@ -13,7 +13,7 @@ import {
   scopeLockPath,
 } from '../utils/scope';
 import { formatCost, type SkillCost } from '../utils/skill-files';
-import { alignCells, type Cell, plain } from '../utils/skill-table';
+import { type Align, alignCells, type Cell, plain } from '../utils/skill-table';
 
 export type Agent = 'claude-code' | 'codex';
 
@@ -60,21 +60,19 @@ export function renderUsageTable(rows: UsageTableRow[], agents: Agent[]): string
   const body = sorted.map((r): Cell[] => [
     { text: r.name, paint: r.cost === 'missing' ? red : cyan },
     ...cols.map(([a]) => plain(String(r.counts[a] ?? 0))),
-    plain(formatCost(r.cost, true)),
-    plain(formatCost(spent(r), true)),
+    plain(formatCost(r.cost)),
+    plain(formatCost(spent(r))),
   ]);
   const footer = [
     plain(plural(rows.length, 'skill')),
     ...cols.map(([a]) => plain(String(rows.reduce((n, r) => n + (r.counts[a] ?? 0), 0)))),
-    plain(
-      formatCost(
-        sum((r) => r.cost),
-        true,
-      ),
-    ),
-    plain(formatCost(sum(spent), true)),
+    plain(formatCost(sum((r) => r.cost))),
+    plain(formatCost(sum(spent))),
   ];
-  return alignCells([header, ...body, footer]);
+  return alignCells(
+    [header, ...body, footer],
+    ['left', ...cols.map((): Align => 'right'), 'right', 'right'],
+  );
 }
 
 function parseAgents(agent: string | undefined): Agent[] {

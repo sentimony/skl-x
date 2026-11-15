@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { get } from 'node:https';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 
 const PKG = 'skl-x';
 const TTL_MS = 24 * 60 * 60 * 1000;
@@ -44,7 +45,40 @@ export function writeCache(cache: Cache, path: string = getCachePath()): void {
   }
 }
 
-function fetchLatest(): Promise<string | undefined> {
+export type InstallKind = 'global' | 'npx' | 'local';
+
+export function realOrSelf(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+}
+
+// global: the CLI lives in <npm root -g>/skl-x; the bin is a symlink, so compare real paths.
+// globalRoot is lazy: under npx there is no need to spawn npm.
+export function detectInstall(
+  cliPath: string = process.argv[1] ?? '',
+  globalRoot: () => string | undefined = npmGlobalRoot,
+): InstallKind {
+  const cli = realOrSelf(cliPath);
+  if (cli.split(/[\\/]/).includes('_npx')) return 'npx';
+  const root = globalRoot();
+  if (root && cli.startsWith(join(realOrSelf(root), PKG) + sep)) return 'global';
+  return 'local';
+}
+
+// Node >= 20 refuses to spawn npm.cmd without a shell on Windows (EINVAL)
+export function npmGlobalRoot(): string | undefined {
+  const r = spawnSync('npm', ['root', '-g'], {
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+  });
+  const out = r.status === 0 ? r.stdout.trim() : '';
+  return out || undefined;
+}
+
+export function fetchLatest(): Promise<string | undefined> {
   return new Promise((resolve) => {
     const req = get(
       `https://registry.npmjs.org/${PKG}/latest`,
@@ -95,8 +129,7 @@ export async function maybePrintUpdateNotice(currentVersion: string): Promise<vo
   }
 
   if (latest && compareVersions(latest, currentVersion) > 0) {
-    process.stderr.write(
-      `\nUpdate available: ${currentVersion} → ${latest}\nRun: npm i -g ${PKG}\n\n`,
-    );
+    const hint = detectInstall() === 'global' ? 'skl update' : `npm i -g ${PKG}`;
+    process.stderr.write(`\nUpdate available: ${currentVersion} → ${latest}\nRun: ${hint}\n\n`);
   }
 }

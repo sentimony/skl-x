@@ -47,11 +47,11 @@ export const costCommand = defineCommand({
       const tokenCell = tokenCells[i] ?? '';
       const suffix = r.status === 'missing' ? `  ${red('missing')}` : '';
       const namePad = ' '.repeat(nameWidth - r.name.length);
-      const tokenPad = suffix ? ' '.repeat(tokenWidth - tokenCell.length) : '';
-      console.log(`${cyan(r.name)}${namePad}  ${tokenCell}${tokenPad}${suffix}`);
+      const tokenPad = ' '.repeat(tokenWidth - tokenCell.length);
+      console.log(`${cyan(r.name)}${namePad}  ${tokenPad}${tokenCell}${suffix}`);
     });
     console.log(
-      `Total: ~${total} tok across ${rows.length} skills  ·  method: chars/3, name+description`,
+      `Total: ${formatCost(total)} across ${rows.length} skills  ·  method: chars/3, name+description`,
     );
   },
 });

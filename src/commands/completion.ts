@@ -8,7 +8,7 @@ _skl_x_completions() {
   cur="\${COMP_WORDS[COMP_CWORD]}"
   prev="\${COMP_WORDS[COMP_CWORD-1]}"
 
-  local cmds="list ls remove rm cost cst usage usg completion add sln"
+  local cmds="list ls remove rm cost cst usage usg completion add sln update up uninstall"
   if [ "\${COMP_CWORD}" -eq 1 ]; then
     COMPREPLY=( $(compgen -W "\${cmds} -h --help -v --version" -- "\${cur}") )
     return 0
@@ -16,6 +16,14 @@ _skl_x_completions() {
 
   local sub="\${COMP_WORDS[1]}"
   case "\${sub}" in
+    ls|list)
+      if [ "\${prev}" = "-m" ] || [ "\${prev}" = "--mode" ]; then
+        COMPREPLY=( $(compgen -W "sm md lg" -- "\${cur}") )
+      else
+        COMPREPLY=( $(compgen -W "-g --global -m --mode --names -h --help" -- "\${cur}") )
+      fi
+      return 0
+      ;;
     rm|remove)
       if [[ "\${cur}" == -* ]]; then
         COMPREPLY=( $(compgen -W "-g --global -y --yes -x --reject -m --mode --lock-only --agents-only --claude-only -h --help" -- "\${cur}") )
@@ -80,6 +88,9 @@ _skl_x() {
     'completion:Print shell completion script'
     'add:Install skills via npx skills add'
     'sln:Symlink skills from a local clone'
+    'update:Install the latest skl-x globally'
+    'up:Alias for update'
+    'uninstall:Remove the global skl-x'
   )
   if (( CURRENT == 2 )); then
     _describe 'command' cmds
@@ -87,6 +98,16 @@ _skl_x() {
   fi
   local sub=\${words[2]}
   case $sub in
+    ls|list)
+      if [[ \${words[CURRENT-1]} == -m || \${words[CURRENT-1]} == --mode ]]; then
+        _values 'mode' sm md lg
+      else
+        _values 'flag' \\
+          '-g[global scope]' '--global[global scope]' \\
+          '-m[sm, md or lg]' '--mode[sm, md or lg]' \\
+          '--names[one skill name per line]'
+      fi
+      ;;
     rm|remove)
       if [[ \${words[CURRENT]} == -* ]]; then
         _values 'flag' \\
@@ -169,8 +190,8 @@ function __skl_x_using_subcommand
   test "$cmd[2]" = "$argv[1]"
 end
 
-complete -c skl -n __skl_x_needs_command -a 'list ls remove rm cost cst usage usg completion add sln'
-complete -c skl-x -n __skl_x_needs_command -a 'list ls remove rm cost cst usage usg completion add sln'
+complete -c skl -n __skl_x_needs_command -a 'list ls remove rm cost cst usage usg completion add sln update up uninstall'
+complete -c skl-x -n __skl_x_needs_command -a 'list ls remove rm cost cst usage usg completion add sln update up uninstall'
 
 for sub in rm remove
   complete -c skl -n "__skl_x_using_subcommand $sub" -f -a '(__skl_x_skill_names)'
@@ -182,6 +203,14 @@ for sub in rm remove
   complete -c skl -n "__skl_x_using_subcommand $sub" -l lock-only -d 'Only remove lock entry'
   complete -c skl -n "__skl_x_using_subcommand $sub" -l agents-only -d 'Only remove from .agents/skills'
   complete -c skl -n "__skl_x_using_subcommand $sub" -l claude-only -d 'Only remove from .claude/skills'
+end
+
+for sub in ls list
+  for bin in skl skl-x
+    complete -c $bin -n "__skl_x_using_subcommand $sub" -s g -l global -d 'Use global scope'
+    complete -c $bin -n "__skl_x_using_subcommand $sub" -l names -d 'One skill name per line'
+    complete -c $bin -n "__skl_x_using_subcommand $sub" -s m -l mode -xa 'sm md lg' -d 'Output mode'
+  end
 end
 
 for bin in skl skl-x

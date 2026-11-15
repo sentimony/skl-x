@@ -39,6 +39,9 @@ describe('skl cost', () => {
     expect(stdout).toMatch(/skill-foo\s+~17 tok/);
     expect(stdout).toMatch(/no-fm\s+\(no frontmatter\)/);
     expect(stdout).toMatch(/ghost-skill\s+~\? tok\s+missing/);
+    // cost is right-aligned to the widest cell, '(no frontmatter)'
+    expect(stdout).toMatch(/^skill-foo {13}~17 tok$/m);
+    expect(stdout).toMatch(/^ghost-skill {12}~\? tok {2}missing$/m);
     expect(stdout).toContain('Total: ~17 tok across 3 skills  ·  method:');
     expect(stdout).not.toMatch(/keep it lean|cleanup|clean it up/);
   });

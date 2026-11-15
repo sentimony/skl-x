@@ -14,6 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readLock } from '../lock/file';
 import { parseSymlinkArgs, planSymlinks, runSln, runSymlink } from './symlink';
 
 describe('parseSymlinkArgs', () => {
@@ -206,7 +207,7 @@ describe('planSymlinks / runSymlink', () => {
     expect(console.log).toHaveBeenCalledWith(
       'Symlinking 1 skill from ../clone to Project scope ██████████ 100%',
     );
-    expect(console.log).toHaveBeenCalledWith('Symlinked 1 skill to Project scope · tdd');
+    expect(console.log).toHaveBeenCalledWith('Project scope · +1 skill symlinked · tdd');
   });
 
   it('maps -a claude-code to .claude/skills only', async () => {
@@ -225,7 +226,7 @@ describe('planSymlinks / runSymlink', () => {
       'Symlinking 2 skills from ../clone to Project scope ██████████ 100%',
     );
     expect(console.log).toHaveBeenCalledWith(
-      'Symlinked 2 skills to Project scope · tdd cross-review',
+      'Project scope · +2 skills symlinked · tdd · cross-review',
     );
   });
 
@@ -400,7 +401,7 @@ describe('planSymlinks / runSymlink', () => {
     expect(console.log).toHaveBeenCalledWith(
       'Symlinking 1 skill from ../clone to Project scope ██████████ 100%',
     );
-    expect(console.log).toHaveBeenCalledWith('Symlinked 1 skill to Project scope · tdd');
+    expect(console.log).toHaveBeenCalledWith('Project scope · +1 skill symlinked · tdd');
   });
 
   it('returns 1 on argument errors', async () => {
@@ -443,16 +444,16 @@ describe('planSymlinks / runSymlink', () => {
       'Symlinking 2 skills from ../clone to Project scope ██████████ 100%',
     );
     expect(console.log).toHaveBeenCalledWith(
-      'Symlinked 2 skills to Project scope · cross-review tdd',
+      'Project scope · +2 skills symlinked · cross-review · tdd',
     );
     expect(console.log).toHaveBeenCalledWith(
-      'skill         .agents    .claude    skills-lock.json  cost',
+      'skill           .agents    .claude  skills-lock.json    cost',
     );
     expect(console.log).toHaveBeenCalledWith(
-      'cross-review  symlinked  symlinked  -                 ~7 tok',
+      'cross-review  symlinked  symlinked         -          ~7 tok',
     );
     expect(console.log).toHaveBeenCalledWith(
-      'tdd           symlinked  symlinked  -                 ~4 tok',
+      'tdd           symlinked  symlinked         -          ~4 tok',
     );
   });
 
@@ -504,12 +505,80 @@ describe('planSymlinks / runSymlink', () => {
     expect(existsSync(join(proj, '.agents'))).toBe(false);
   });
 
-  it('marks skills that are in skills-lock.json with + in the table', async () => {
-    writeFileSync(join(proj, 'skills-lock.json'), JSON.stringify({ skills: { tdd: {} } }));
+  it('removes the skills-lock.json entry of a linked skill and keeps the others', async () => {
+    writeFileSync(
+      join(proj, 'skills-lock.json'),
+      JSON.stringify({ skills: { tdd: {}, other: {} } }),
+    );
     expect(await runSymlink(['../clone', '-s', 'tdd', '-y'], { cwd: proj })).toBe(0);
     expect(console.log).toHaveBeenCalledWith(
-      'tdd    symlinked  symlinked  +                 ~4 tok',
+      'tdd    symlinked  symlinked         -          ~4 tok',
     );
+    expect(Object.keys(readLock(join(proj, 'skills-lock.json')).skills)).toEqual(['other']);
+  });
+
+  it('removes a copy in a dir outside -a, like skl rm', async () => {
+    mkdirSync(join(proj, '.agents/skills/tdd'), { recursive: true });
+    mkdirSync(join(proj, '.claude/skills/tdd'), { recursive: true });
+    writeFileSync(join(proj, 'skills-lock.json'), JSON.stringify({ skills: { tdd: {} } }));
+    expect(await runSymlink(['../clone', '-s', 'tdd', '-a', 'codex', '-y'], { cwd: proj })).toBe(0);
+    expect(readlinkSync(join(proj, '.agents/skills/tdd'))).toBe('../../../clone/skills/tdd');
+    expect(lstatSync(join(proj, '.claude/skills/tdd'), { throwIfNoEntry: false })).toBeUndefined();
+    expect(readLock(join(proj, 'skills-lock.json')).skills).toEqual({});
+  });
+
+  it('removes a dangling symlink outside -a, leaving the targets of links alone', async () => {
+    mkdirSync(join(proj, '.claude/skills'), { recursive: true });
+    symlinkSync('../../nowhere', join(proj, '.claude/skills/tdd'));
+    symlinkSync('../../../clone/skills/cross-review', join(proj, '.claude/skills/cross-review'));
+    expect(
+      await runSymlink(['../clone', '-s', 'tdd', 'cross-review', '-a', 'codex', '-y'], {
+        cwd: proj,
+      }),
+    ).toBe(0);
+    expect(readdirSync(join(proj, '.claude/skills'))).toEqual([]);
+    expect(existsSync(join(clone, 'skills/cross-review/SKILL.md'))).toBe(true);
+  });
+
+  it('lists the dir copy and the lock entry once and changes nothing on no', async () => {
+    mkdirSync(join(proj, '.claude/skills/tdd'), { recursive: true });
+    writeFileSync(join(proj, 'skills-lock.json'), JSON.stringify({ skills: { tdd: {} } }));
+    const confirm = vi.fn(async (_q: string) => false);
+    expect(await runSymlink(['../clone', '-s', 'tdd', '-a', 'codex'], { cwd: proj, confirm })).toBe(
+      1,
+    );
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(confirm).toHaveBeenCalledWith('Replace 1 existing skill?');
+    expect(console.log).toHaveBeenCalledWith('.claude/skills/tdd - folder');
+    expect(console.log).toHaveBeenCalledWith('skills-lock.json - tdd');
+    expect(lstatSync(join(proj, '.claude/skills/tdd')).isDirectory()).toBe(true);
+    expect(existsSync(join(proj, '.agents'))).toBe(false);
+    expect(Object.keys(readLock(join(proj, 'skills-lock.json')).skills)).toEqual(['tdd']);
+  });
+
+  it('asks for a skill that is only in skills-lock.json', async () => {
+    writeFileSync(join(proj, 'skills-lock.json'), JSON.stringify({ skills: { tdd: {} } }));
+    const confirm = vi.fn(async (_q: string) => true);
+    expect(await runSymlink(['../clone', '-s', 'tdd'], { cwd: proj, confirm })).toBe(0);
+    expect(confirm).toHaveBeenCalledWith('Replace 1 existing skill?');
+    expect(readLock(join(proj, 'skills-lock.json')).skills).toEqual({});
+  });
+
+  it('keeps .claude/skills -> .agents/skills when linking for codex only', async () => {
+    mkdirSync(join(proj, '.agents/skills'), { recursive: true });
+    mkdirSync(join(proj, '.claude'));
+    symlinkSync('../.agents/skills', join(proj, '.claude/skills'));
+    expect(await runSymlink(['../clone', '-s', 'tdd', '-a', 'codex', '-y'], { cwd: proj })).toBe(0);
+    expect(realpathSync(join(proj, '.claude/skills/tdd'))).toBe(join(clone, 'skills/tdd'));
+  });
+
+  it('refuses to remove an entry outside -a that the source is reached through', async () => {
+    mkdirSync(join(proj, '.claude/skills'), { recursive: true });
+    symlinkSync('../../../clone/skills/tdd', join(proj, '.claude/skills/tdd'));
+    expect(await runSymlink(['.claude', '-s', 'tdd', '-a', 'codex', '-y'], { cwd: proj })).toBe(1);
+    expect(readlinkSync(join(proj, '.claude/skills/tdd'))).toBe('../../../clone/skills/tdd');
+    expect(existsSync(join(proj, '.agents'))).toBe(false);
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('is the source itself'));
   });
 
   const logged = () => vi.mocked(console.log).mock.calls.map((c) => c[0]);
@@ -524,16 +593,16 @@ describe('planSymlinks / runSymlink', () => {
       );
       expect(logged()).toEqual([
         'Symlinking 1 skill from ../clone to Project scope ██████████ 100%',
-        'skill  .agents    .claude    skills-lock.json  cost',
-        'tdd    symlinked  symlinked  -                 ~4 tok',
-        'Symlinked 1 skill to Project scope · tdd',
+        'skill    .agents    .claude  skills-lock.json    cost',
+        'tdd    symlinked  symlinked         -          ~4 tok',
+        'Project scope · +1 skill symlinked · tdd',
       ]);
     },
   );
 
   it('runSln --mode small prints the summary only and still links', async () => {
     expect(await runSln(['../clone', '--mode', 'small', '-y'], { cwd: proj })).toBe(0);
-    expect(logged()).toEqual(['Symlinked 2 skills to Project scope · cross-review tdd']);
+    expect(logged()).toEqual(['Project scope · +2 skills symlinked · cross-review · tdd']);
     expect(lstatSync(join(proj, '.claude/skills/tdd')).isSymbolicLink()).toBe(true);
   });
 

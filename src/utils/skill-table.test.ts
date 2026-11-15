@@ -4,7 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setColorEnabled } from './ansi';
-import { collectRows, renderSkillTable, type SkillRow } from './skill-table';
+import {
+  collectRows,
+  readSkillVersions,
+  renderSkillTable,
+  type SkillRow,
+  scopeTotalLine,
+} from './skill-table';
 
 const ROWS: SkillRow[] = [
   { name: 'cross-review', agents: 'real', claude: 'symlink', inLock: true, cost: 262 },
@@ -24,12 +30,12 @@ afterEach(() => setColorEnabled(false));
 describe('renderSkillTable', () => {
   it('renders the spec table with a total row', () => {
     expect(renderSkillTable(ROWS, { lockLabel: 'skills-lock.json', total: true })).toEqual([
-      'skill            .agents    .claude    skills-lock.json  cost',
-      'cross-review     universal  symlinked  +                 ~262 tok',
-      'echarts          -          copied     -                 -',
-      'old-skill        -          -          +                 ~? tok',
-      'webapp-debugger  symlinked  broken     -                 (no frontmatter)',
-      '4 skills         2          3          2                 ~262 tok',
+      'skill              .agents    .claude  skills-lock.json              cost',
+      'cross-review     universal  symlinked         +                  ~262 tok',
+      'echarts                  -     copied         -                         -',
+      'old-skill                -          -         +                    ~? tok',
+      'webapp-debugger  symlinked     broken         -          (no frontmatter)',
+      '4 skills                 2          3         2                  ~262 tok',
     ]);
   });
 
@@ -39,8 +45,8 @@ describe('renderSkillTable', () => {
     ];
     expect(renderSkillTable(rows, { lockLabel: '.agents/.skill-lock.json', total: false })).toEqual(
       [
-        'skill  .agents    .claude    .agents/.skill-lock.json  cost',
-        'tdd    symlinked  symlinked  -                         ~262 tok',
+        'skill    .agents    .claude  .agents/.skill-lock.json      cost',
+        'tdd    symlinked  symlinked             -              ~262 tok',
       ],
     );
   });
@@ -48,7 +54,7 @@ describe('renderSkillTable', () => {
   it('says "1 skill" in the total row', () => {
     const rows: SkillRow[] = [{ name: 'a', inLock: true, cost: 'missing' }];
     expect(renderSkillTable(rows, { lockLabel: 'skills-lock.json', total: true }).at(-1)).toBe(
-      '1 skill  0        0        1                 ~0 tok',
+      '1 skill        0        0         1          ~0 tok',
     );
   });
 
@@ -57,14 +63,61 @@ describe('renderSkillTable', () => {
     const lines = renderSkillTable(ROWS, { lockLabel: 'skills-lock.json', total: false });
     expect(lines[0]).toContain('\x1b[1mskill\x1b[22m');
     expect(lines[1]).toBe(
-      '\x1b[36mcross-review\x1b[0m     \x1b[32muniversal\x1b[0m  \x1b[33msymlinked\x1b[0m  \x1b[32m+\x1b[0m                 ~262 tok',
+      '\x1b[36mcross-review\x1b[0m     \x1b[32muniversal\x1b[0m  \x1b[33msymlinked\x1b[0m         \x1b[32m+\x1b[0m                  ~262 tok',
     );
     expect(lines[2]).toContain('\x1b[32mcopied\x1b[0m');
     expect(lines[2]).toContain('\x1b[33m-\x1b[0m');
     expect(lines[3]).toBe(
-      '\x1b[36mold-skill\x1b[0m        -          -          \x1b[31m+\x1b[0m                 ~? tok',
+      '\x1b[36mold-skill\x1b[0m                -          -         \x1b[31m+\x1b[0m                    ~? tok',
     );
     expect(lines[4]).toContain('\x1b[31mbroken\x1b[0m');
+  });
+
+  it('groups thousands in the cost cells', () => {
+    const rows: SkillRow[] = [
+      { name: 'a', agents: 'real', claude: 'symlink', inLock: true, cost: 2000 },
+      { name: 'b', agents: 'real', claude: 'symlink', inLock: true, cost: 1333 },
+    ];
+    expect(renderSkillTable(rows, { lockLabel: 'skills-lock.json', total: true })).toEqual([
+      'skill       .agents    .claude  skills-lock.json        cost',
+      'a         universal  symlinked         +          ~2,000 tok',
+      'b         universal  symlinked         +          ~1,333 tok',
+      '2 skills          2          2         2          ~3,333 tok',
+    ]);
+  });
+});
+
+describe('scopeTotalLine', () => {
+  it('prints the scope, signed count and grouped cost', () => {
+    expect(scopeTotalLine(false, 30, 3333, '-')).toBe(
+      'Project scope · -30 skills removed · ~3,333 tok',
+    );
+    expect(scopeTotalLine(true, 1, 74)).toBe('Global scope · 1 skill · ~74 tok');
+  });
+
+  it('says "No skills" for zero', () => {
+    expect(scopeTotalLine(true, 0, 0, '-')).toBe('Global scope · No skills');
+  });
+});
+
+describe('readSkillVersions', () => {
+  let tmp = '';
+  afterEach(() => rmSync(tmp, { recursive: true, force: true }));
+
+  it('reads metadata.version and leaves out skills without one or without a file', () => {
+    tmp = mkdtempSync(join(tmpdir(), 'skl-table-'));
+    const agents = join(tmp, '.agents', 'skills');
+    const claude = join(tmp, '.claude', 'skills');
+    const seed = (name: string, fm: string) => {
+      mkdirSync(join(agents, name), { recursive: true });
+      writeFileSync(join(agents, name, 'SKILL.md'), `---\nname: ${name}\n${fm}---\n`);
+    };
+    seed('a', 'metadata:\n  version: 1.2.3\n');
+    seed('b', '');
+    seed('c', 'version: 9.9.9\n');
+    expect(readSkillVersions({ agents, claude }, ['a', 'b', 'c', 'gone'])).toEqual(
+      new Map([['a', '1.2.3']]),
+    );
   });
 });
 

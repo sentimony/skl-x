@@ -108,10 +108,10 @@ describe('renderUsageTable', () => {
         ['claude-code', 'codex'],
       ),
     ).toEqual([
-      'skill           .agents  .claude  cost      total',
-      'hibob-scraping  11       0        ~262 tok  ~2,882 tok',
-      'hibob-scrapppp  11       0        ~262 tok  ~2,882 tok',
-      '2 skills        22       0        ~524 tok  ~5,764 tok',
+      'skill           .agents  .claude      cost       total',
+      'hibob-scraping       11        0  ~262 tok  ~2,882 tok',
+      'hibob-scrapppp       11        0  ~262 tok  ~2,882 tok',
+      '2 skills             22        0  ~524 tok  ~5,764 tok',
     ]);
   });
 
@@ -126,11 +126,11 @@ describe('renderUsageTable', () => {
         ['codex'],
       ),
     ).toEqual([
-      'skill     .agents  cost        total',
-      'b         3        -           -',
-      'c         3        ~1,000 tok  ~3,000 tok',
-      'a         1        ~? tok      ~? tok',
-      '3 skills  7        ~1,000 tok  ~3,000 tok',
+      'skill     .agents        cost       total',
+      'b               3           -           -',
+      'c               3  ~1,000 tok  ~3,000 tok',
+      'a               1      ~? tok      ~? tok',
+      '3 skills        7  ~1,000 tok  ~3,000 tok',
     ]);
   });
 

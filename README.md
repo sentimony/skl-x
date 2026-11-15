@@ -37,9 +37,9 @@ npx -y skl-x add sentimony/skills -s tdd -a codex claude-code -y -m sm
 
 ```text
 Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%
-skill  .agents    .claude    skills-lock.json  cost
-tdd    universal  symlinked  +                 ~125 tok
-Installed 1 skill to Project scope · tdd
+skill    .agents    .claude  skills-lock.json      cost
+tdd    universal  symlinked         +          ~104 tok
+Project scope · +1 skill installed · tdd 0.0.16
 ```
 
 Without `-m` (`lg`), the `npx skills add` output is shown as is, followed by the same lines when
@@ -52,6 +52,12 @@ stays on screen for at least 150 ms: one that arrives sooner waits, and the fina
 the last one. In scripts and CI only the
 final line is printed. If `npx` fails, its full output is printed.
 
+`npx skills add` replaces a skill only in the dirs of `-a`. After it succeeds, `add` removes what
+is left of each added skill in the other agent dir, such as a `skl sln` link or a copy for the
+other agent, as `skl rm` before the install would. The target of a removed link is not touched.
+Entries in the dirs of `-a` stay; without `-a`, so does an entry that resolves to the skill's
+entry in the other dir. If an added skill is missing for an agent of `-a`, `add` exits 1.
+
 ### Local skills
 
 `skl-x sln <path>` symlinks `<path>/skills/<name>` into `.agents/skills` and
@@ -63,6 +69,11 @@ reinstalling. `<path>` may also be the skills folder itself, such as
 (`plugins/devflow/skills/tdd`, `plugins/writing/skills/dashfix`). The search goes five folders
 deep, skips hidden folders (`.agents`, `.claude`, `.git`), `node_modules`, `dist`, `coverage` and
 symlinks, and does not look inside a skill. A name found in two folders exits 1.
+
+Before linking, `sln` removes each selected skill the way `skl rm` does: a copy or another link in
+the agent dir outside `-a` and its `skills-lock.json` entry, which would otherwise bring a copy
+back over the link on the next `add`. Without `-y` it lists these with the replaced copies and
+asks once.
 
 ```sh
 # Every skill in the clone
@@ -77,11 +88,18 @@ npx -y skl-x sln ../skills -s tdd cross-review -a claude-code
 
 ```text
 Symlinking 2 skills from ../skills to Project scope ██████████ 100%
-skill         .agents    .claude    skills-lock.json  cost
-cross-review  symlinked  symlinked  -                 ~186 tok
-tdd           symlinked  symlinked  -                 ~125 tok
-Symlinked 2 skills to Project scope · cross-review tdd
+skill           .agents    .claude  skills-lock.json      cost
+cross-review  symlinked  symlinked         -          ~186 tok
+tdd           symlinked  symlinked         -          ~125 tok
+Project scope · +2 skills symlinked · cross-review ⁰·⁰·² · tdd
 ```
+
+In the last line of `add` and `sln` the skills are separated by ` · `, and a skill that has
+`metadata.version` in its `SKILL.md` shows it after a space. In a terminal, numeric dotted
+versions use superscript digits and middle dots (`cross-review ⁰·⁰·² · tdd`). Other version
+text, including prerelease and build suffixes, stays unchanged. Redirected output keeps the
+original version (`cross-review 0.0.2 · tdd`).
+`ls -m sm` does not show versions.
 
 - Without `-s`, every `<path>/skills/<name>/SKILL.md` is linked (or `<path>/<name>/SKILL.md`
   when `<path>/skills` has no skills), except skills with
@@ -97,16 +115,18 @@ Symlinked 2 skills to Project scope · cross-review tdd
 | `--skill, -s <names...>` | Only these skills; a name starting with a space is skipped |
 | `--reject, -x <names...>` | Every skill except these (not with `-s`) |
 | `--agent, -a <agents...>` | `codex` (`.agents/skills`), `claude-code` (`.claude/skills`); default: both |
-| `--yes, -y` | Skip `npx` prompts (`add`); replace existing copies without asking (`sln`) |
+| `--yes, -y` | Skip `npx` prompts (`add`); replace and remove existing copies and lock entries without asking (`sln`) |
 | `--mode, -m <mode>` | `lg` (`large`, default), `md` (`medium`), `sm` (`small`); `md` and `sm` in `add` need `-y` |
 
 | Mode | `add` | `sln` | `rm` |
 |---|---|---|---|
 | `lg` | `npx` output, then the `md` lines | as `md` | plan and summary |
-| `md` | progress line, table, `Installed N skills to <scope> · <names>` | progress line, table, `Symlinked N skills to <scope> · <names>` | `Executed A/B/C skills from <scope>` |
-| `sm` | `Installed N skills to <scope> · <names>` | `Symlinked N skills to <scope> · <names>` | `Executed A/B/C skills from <scope>` |
+| `md` | progress line, table, `<scope> · +N skills installed · <names>` | progress line, table, `<scope> · +N skills symlinked · <names>` | `<scope> · -N skills removed · ~X tok` |
+| `sm` | `<scope> · +N skills installed · <names>` | `<scope> · +N skills symlinked · <names>` | `<scope> · -N skills removed · ~X tok` |
 
-`<scope>` is `Project scope`, or `Global scope` with `-g`. In a terminal these lines are gray,
+`<scope>` is `Project scope`, or `Global scope` with `-g`. `rm` counts the skills removed from at
+least one place and sums their cost; with nothing to remove it prints `<scope> · No skills`. The
+`.agents`/`.claude`/lock breakdown is in the `lg` summary only. In a terminal these lines are gray,
 except the green bar and the skill names (cyan).
 
 ## Cost
@@ -130,10 +150,10 @@ npx -y skl-x usage -a codex --mode activations
 
 ```text
 Project scope · Usage 22 times by 7d
-skill         .agents  .claude  cost      total
-cross-review  9        2        ~186 tok  ~2,046 tok
-tdd           0        11       ~125 tok  ~1,375 tok
-2 skills      9        13       ~311 tok  ~3,421 tok
+skill         .agents  .claude      cost       total
+cross-review        9        2  ~186 tok  ~2,046 tok
+tdd                 0       11  ~125 tok  ~1,375 tok
+2 skills            9       13  ~311 tok  ~3,421 tok
 ```
 
 `.agents` counts Codex runs, `.claude` - Claude Code runs; `total` is cost × runs. A skill that
@@ -161,6 +181,8 @@ is no longer installed is shown in red with `~? tok`.
 |---|---|---|
 | `skl-x list` | `ls` | Table of skills: `.agents`, `.claude`, lock and cost per skill |
 | `skl-x remove` | `rm` | Remove skills from disk and `skills-lock.json` |
+| `skl-x update` | `up` | Install the latest skl-x globally (`npm i -g`); only a global npm install |
+| `skl-x uninstall` | | Remove the global skl-x (`npm uninstall -g`) and its update-check cache; skills stay |
 | `skl-x completion` | | Print a shell completion script |
 
 `skl-x` with no command opens a menu in a terminal and prints `cost` otherwise.
@@ -169,12 +191,12 @@ is no longer installed is shown in red with `~? tok`.
 
 ```text
 Project scope
-skill            .agents    .claude    skills-lock.json  cost
-cross-review     universal  symlinked  +                 ~186 tok
-echarts          -          copied     -                 ~98 tok
-old-skill        -          -          +                 ~? tok
-webapp-debugger  symlinked  broken     -                 ~? tok
-4 skills         2          3          2                 ~284 tok
+skill              .agents    .claude  skills-lock.json      cost
+cross-review     universal  symlinked         +          ~186 tok
+echarts                  -     copied         -           ~98 tok
+old-skill                -          -         +            ~? tok
+webapp-debugger  symlinked     broken         -            ~? tok
+4 skills                 2          3         2          ~284 tok
 ```
 
 | Cell | Meaning |
@@ -186,7 +208,9 @@ webapp-debugger  symlinked  broken     -                 ~? tok
 | `-` | not there |
 | `+` | in the lock; red when the skill is on neither disk |
 
-`skl-x ls --names` prints one name per line, for scripts and completion.
+`skl-x ls --names` prints one name per line, for scripts and completion. `skl-x ls -m sm` prints
+one line, `Project scope · 30 skills · ~3,333 tok` (`<scope> · No skills` when empty); `md` and
+`lg` print the table.
 
 ### `skl-x remove`
 
@@ -195,7 +219,7 @@ skl-x rm tdd                     # plan, Proceed? [y/n], then Clean lock? [y/n]
 skl-x rm .                       # every skill in scope
 skl-x rm . -x tdd cross-review   # every skill except the listed ones
 skl-x rm tdd -y                  # no prompts, no plan
-skl-x rm . -y -m sm              # one line: Executed A/B/C skills from Project scope
+skl-x rm . -y -m sm              # one line: Project scope · -30 skills removed · ~3,333 tok
 skl-x rm tdd --lock-only         # also --agents-only, --claude-only
 skl-x rm tdd -g                  # global scope
 ```
@@ -224,6 +248,8 @@ skl-x completion fish > ~/.config/fish/completions/skl.fish
 
 ```sh
 npm i -g skl-x    # provides `skl-x` and the short `skl`
+skl update        # later: install the latest version globally (alias `skl up`)
+skl uninstall     # remove it: asks first, -y skips the question
 ```
 
 Moving from `@sentimony/sklx` or `skillio`: all three packages install the `skl` bin, so

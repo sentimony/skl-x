@@ -7,6 +7,8 @@ import { costCommand } from './commands/cost';
 import { listCommand } from './commands/list';
 import { removeCommand } from './commands/remove';
 import { runSln } from './commands/symlink';
+import { runUninstall } from './commands/uninstall';
+import { runUpdate } from './commands/update';
 import { usageCommand } from './commands/usage';
 import { detectColorSupport, setColorEnabled } from './utils/ansi';
 import { maybePrintUpdateNotice } from './utils/update-check';
@@ -69,8 +71,9 @@ function reorderRootFlagsToSubcommand(argv: string[]): string[] {
 // add and sln take raw argv: mergeAgentArgs would join -a values with \x1f and citty
 // cannot hold several -s values. Only -g/--global may precede them, so an option value
 // such as `--since add` never turns into a command; these names stay out of SUBCOMMAND_NAMES
-// for the same reason. install and i are here only to point at add and sln.
-const RAW_COMMANDS = new Set(['add', 'sln', 'install', 'i']);
+// for the same reason. install and i are here only to point at add and sln. update, up and
+// uninstall skip the update notice, so they are raw too.
+const RAW_COMMANDS = new Set(['add', 'sln', 'install', 'i', 'update', 'up', 'uninstall']);
 
 function detectRawCommand(argv: string[]): { command: string; args: string[] } | null {
   const tail = argv.slice(2);
@@ -106,6 +109,8 @@ function printRootHelp(): void {
     '  usage, usg       Show skill usage × cost (consumption) with missed rows',
     '  add              Install skills via `npx skills add`',
     '  sln              Symlink skills from a local clone into .agents/skills and .claude/skills',
+    '  update, up       Install the latest skl-x globally (npm i -g)',
+    '  uninstall        Remove the global skl-x (npm uninstall -g); skills stay',
     '  completion       Print shell completion script (bash, zsh, fish)',
   ];
   console.log(lines.join('\n'));
@@ -143,8 +148,8 @@ function printRemoveHelp(): void {
     '                       "Proceed?" and "Clean skills-lock.json?" questions)',
     '                       and the plan; only the summary is printed',
     '  -m, --mode           lg (large, default): plan and summary',
-    '                       md (medium), sm (small): one "Executed A/B/C skills" line instead of',
-    '                       the summary (.agents/skills / .claude/skills / lock counts)',
+    '                       md (medium), sm (small): one "<scope> · -N skills removed · ~X tok" line',
+    '                       instead of the summary',
     '  -x, --reject         With ".": skill names to keep (space-separated)',
     '      --lock-only      Only remove the skills-lock.json entry',
     '      --agents-only    Only remove from .agents/skills',
@@ -239,6 +244,9 @@ const main = defineCommand({
       process.exit(1);
     }
     setColorEnabled(detectColorSupport());
+    if (raw.command === 'update' || raw.command === 'up')
+      process.exit(await runUpdate(raw.args, { version }));
+    if (raw.command === 'uninstall') process.exit(await runUninstall(raw.args, { version }));
     await maybePrintUpdateNotice(version);
     process.exit(raw.command === 'sln' ? await runSln(raw.args) : await runAdd(raw.args));
   }

@@ -1,5 +1,113 @@
 # Changelog
 
+## 0.4.16 (2026-11-15)
+
+### Changed
+
+1. In a terminal, the last line of `skl add` and `skl sln` shows skill versions with Unicode
+   superscript digits and middle dots, keeping a space after the name: `cross-agent ⁰·⁰·¹¹`.
+   This applies to numeric dotted versions; other text, including prerelease and build
+   suffixes, stays unchanged. Redirected output keeps the original version, such as
+   `cross-agent 0.0.11`.
+
+## 0.4.15 (2026-11-13)
+
+### Changed
+
+- The last line of `skl add` and `skl sln` separates the skills with ` · ` (gray) instead of a
+  space and shows a skill's `metadata.version` after its name when the installed `SKILL.md` has
+  one: `Project scope · +2 skills symlinked · fdb 0.0.2 · skill-tuning`. `skl ls -m sm` is unchanged.
+- `skl update` from a local copy (`node_modules`, a clone) exits 0 instead of 1; the message "skl-x
+  runs from <folder>, not from a global npm install; update that copy by hand" stays on stderr, so a
+  `set -e` script that runs `skl update` first is not stopped. No `--strict` flag. `skl uninstall`
+  from a local copy still exits 1.
+- `skl update` prints `skl-x X.Y.Z is already the latest` and the two `runs through npx` lines in
+  gray, like the scope lines of `add`, `sln`, `rm` and `ls`. Without color the text is the same.
+
+## 0.4.14 (2026-10-24)
+
+### Changed
+
+- The last line of `skl add` and `skl sln` starts with the scope, like `skl rm` and `skl ls`:
+  `Project scope · +8 skills installed · <names>` and `Project scope · +2 skills symlinked · <names>`
+  instead of `Installed 8 skills to Project scope · <names>`. With nothing changed, `skl add -m sm`
+  and `-m md` print `Project scope · No skills installed`; `skl sln` with nothing selected still
+  prints `No skills to symlink in <source>.`
+- `skl rm` in `-m md` and `-m sm` prints `Project scope · -27 skills removed · ~3,608 tok`.
+- `skl update` prints `skl-x X.Y.Z is already the latest` without the trailing period.
+
+## 0.4.13 (2026-10-24)
+
+### Added
+
+- `skl ls -m sm` prints one line, `Project scope · 30 skills · ~3,333 tok`, instead of the table;
+  an empty scope gives `Project scope · No skills`. `-m md`, `-m lg` and no `-m` print the table.
+  Shell completion knows `ls -m`, `-g` and `--names`.
+
+### Changed
+
+- `skl rm` in `-m md` and `-m sm` prints `Project scope · -30 skills · ~3,333 tok` instead of
+  `Executed 30/30/24 skills from Project scope`: the skills removed from at least one place and
+  their cost, read before removal. With nothing to remove it prints `Project scope · No skills`.
+  The `.agents`/`.claude`/lock breakdown stays in the `lg` summary.
+- Tables of `ls`, `add`, `sln` and `usg` right-align counts, install cells and cost, and center
+  the `+`/`-` of the lock column; `cst` right-aligns its cost column.
+- Cost cells group thousands everywhere (`~3,333 tok`), as `usg` already did; also the `cst` total.
+
+## 0.4.12 (2026-10-19)
+
+### Added
+
+- `skl uninstall` removes the global skl-x: it asks `Remove skl-x X.Y.Z from the global npm
+  install? [y/n]` (`-y` skips the question), runs `npm uninstall -g skl-x`, removes the update-check
+  cache `~/.cache/skl-x/version.json` and prints `skl-x X.Y.Z removed.` with a reminder that a
+  completion script in a shell rc file stays. Skills are not touched. Under `npx` it removes
+  nothing (exit 0), and a local copy exits 1 with its folder. No alias: `rm` removes skills.
+
+### Changed
+
+- `skl update` under `npx` names the version that runs (`skl-x 0.4.12 runs through npx, ...`), and
+  both versions when npx ran an older copy from its cache.
+
+## 0.4.11 (2026-10-18)
+
+### Added
+
+- `skl update` (alias `skl up`) installs the latest skl-x from npm globally:
+  `npm i -g skl-x@<latest>`, then `skl-x <latest> installed successfully.`; on the latest version it
+  prints `skl-x X.Y.Z is already the latest.` and installs nothing. Only a global npm install is
+  updated: under `npx` it installs nothing (exit 0), and a local copy (a project dependency or a
+  clone) exits 1 with its folder. The update notice is not printed before or after it.
+
+### Changed
+
+- The update notice says `Run: skl update` when skl-x runs from a global npm install, and
+  `Run: npm i -g skl-x` otherwise.
+
+## 0.4.10 (2026-10-18)
+
+### Fixed
+
+- `add` no longer removes the `.claude/skills` link that a rerun of `npx skills add -a codex
+  claude-code` leaves as it was: every second run left Claude Code without the skills (0.4.9).
+  An entry in a dir of an agent named with `-a` is kept; without `-a`, an entry that resolves to
+  the skill's entry in the other dir is kept. Entries outside `-a` and `skl sln` links elsewhere
+  are still removed.
+- `add` exits 1 and names the dir (`skl add: <name> is missing in .claude/skills`) when an added
+  skill is missing for an agent of `-a`, instead of printing `Installed`.
+
+## 0.4.9 (2026-10-18)
+
+### Changed
+
+- `sln` removes each selected skill as `skl rm` does before linking it: the copy or link in the
+  agent dir outside `-a` and the `skills-lock.json` entry. Without `-y` these are listed with the
+  replaced copies (`skills-lock.json - <name>`) under one `Replace N existing skills?` question.
+  An entry the source is reached through is refused, as for a replace.
+- `add` removes, after `npx skills add` succeeds, the entries of each added skill that `npx` did
+  not rewrite (a `skl sln` link or a copy in the agent dir outside `-a`). A failed install leaves
+  them in place.
+
 ## 0.4.8 (2026-10-12)
 
 ### Changed

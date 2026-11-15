@@ -1,6 +1,10 @@
 import {
+  existsSync,
+  lstatSync,
+  lutimesSync,
   mkdirSync,
   mkdtempSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -104,7 +108,7 @@ describe('runAdd - lg mode', () => {
     expect(spawn).not.toHaveBeenCalled();
     expect(console.log).toHaveBeenCalledWith(ADD_HELP);
     expect(ADD_HELP).toContain('USAGE skl-x add <source>');
-    expect(ADD_HELP).not.toMatch(/-ln|--link|install/);
+    expect(ADD_HELP).not.toMatch(/-ln|--link/);
   });
 
   it('rejects a bad --mode value without spawning npx', async () => {
@@ -129,9 +133,9 @@ describe('runAdd - lg mode', () => {
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
       'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
-      'skill         .agents    .claude    skills-lock.json  cost',
-      'cross-review  universal  symlinked  +                 ~4 tok',
-      'Installed 1 skill to Project scope · cross-review',
+      'skill           .agents    .claude  skills-lock.json    cost',
+      'cross-review  universal  symlinked         +          ~4 tok',
+      'Project scope · +1 skill installed · cross-review',
     ]);
   });
 
@@ -198,9 +202,9 @@ describe('runAdd - md mode', () => {
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
       'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
-      'skill         .agents    .claude    skills-lock.json  cost',
-      'cross-review  universal  symlinked  +                 ~4 tok',
-      'Installed 1 skill to Project scope · cross-review',
+      'skill           .agents    .claude  skills-lock.json    cost',
+      'cross-review  universal  symlinked         +          ~4 tok',
+      'Project scope · +1 skill installed · cross-review',
     ]);
   });
 
@@ -231,7 +235,7 @@ describe('runAdd - md mode', () => {
     expect(await runAdd(['sentimony/skills', '-y', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
       'Installing 0 skills from https://github.com/sentimony/skills to Project scope ██████████ 100%',
-      'Installed 0 skills to Project scope',
+      'Project scope · No skills installed',
     ]);
   });
 
@@ -254,9 +258,9 @@ describe('runAdd - md mode', () => {
     expect(console.log).toHaveBeenCalledWith(
       'Installing 1 skill from https://github.com/sentimony/skills to Project scope ██████████ 100%',
     );
-    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
+    expect(console.log).toHaveBeenCalledWith('Project scope · +1 skill installed · tdd');
     expect(console.log).toHaveBeenCalledWith(
-      'tdd    universal  symlinked  +                 ~1 tok',
+      'tdd    universal  symlinked         +          ~1 tok',
     );
   });
 
@@ -278,7 +282,7 @@ describe('runAdd - md mode', () => {
     expect(lines).toContain(
       'Installing 1 skill from https://github.com/sentimony/skills to Global scope ██████████ 100%',
     );
-    expect(lines.at(-1)).toBe('Installed 1 skill to Global scope · g1');
+    expect(lines.at(-1)).toBe('Global scope · +1 skill installed · g1');
     expect(lines.some((l) => l.startsWith('skill') && l.includes('.agents/.skill-lock.json'))).toBe(
       true,
     );
@@ -295,7 +299,7 @@ describe('runAdd - md mode', () => {
       return ok();
     });
     expect(await runAdd(['sentimony/skills', '-y', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
-    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
+    expect(console.log).toHaveBeenCalledWith('Project scope · +1 skill installed · tdd');
   });
 
   it('drops "from <source>" when the first argument is a flag', async () => {
@@ -303,7 +307,7 @@ describe('runAdd - md mode', () => {
     expect(await runAdd(['-y', 'sentimony/skills', '-m', 'md'], { spawn, cwd: proj })).toBe(0);
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
       'Installing 0 skills to Project scope ██████████ 100%',
-      'Installed 0 skills to Project scope',
+      'Project scope · No skills installed',
     ]);
   });
   it('awaits an async spawner', async () => {
@@ -314,7 +318,7 @@ describe('runAdd - md mode', () => {
     expect(
       await runAdd(['sentimony/skills', '-s', 'tdd', '-y', '-m', 'md'], { spawn, cwd: proj }),
     ).toBe(0);
-    expect(console.log).toHaveBeenCalledWith('Installed 1 skill to Project scope · tdd');
+    expect(console.log).toHaveBeenCalledWith('Project scope · +1 skill installed · tdd');
   });
 
   it('shows the bar once online, fills the intro, then follows npx and the disk', async () => {
@@ -379,11 +383,68 @@ describe('runAdd - md mode', () => {
 describe('summaryLine', () => {
   afterEach(() => setColorEnabled(false));
 
+  it.each([true, false, undefined])('formats skill versions for isTTY=%s', (isTTY) => {
+    const tty = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+    Object.defineProperty(process.stdout, 'isTTY', { value: isTTY, configurable: true });
+    try {
+      const versions = new Map([
+        ['cross-agent', '0.0.11'],
+        ['digits', '2.345.67890'],
+      ]);
+      for (const verb of ['installed', 'symlinked']) {
+        expect(
+          summaryLine(verb, ['cross-agent', 'digits', 'unversioned'], 'Project scope', versions),
+        ).toBe(
+          isTTY
+            ? `Project scope · +3 skills ${verb} · cross-agent ⁰·⁰·¹¹ · digits ²·³⁴⁵·⁶⁷⁸⁹⁰ · unversioned`
+            : `Project scope · +3 skills ${verb} · cross-agent 0.0.11 · digits 2.345.67890 · unversioned`,
+        );
+      }
+      expect(versions.get('cross-agent')).toBe('0.0.11');
+      for (const version of ['1.0.0-beta.1', '1.2.3+build.4', 'v1.2.3', 'draft']) {
+        expect(
+          summaryLine('installed', ['custom'], 'Project scope', new Map([['custom', version]])),
+        ).toBe(`Project scope · +1 skill installed · custom ${version}`);
+      }
+    } finally {
+      if (tty) Object.defineProperty(process.stdout, 'isTTY', tty);
+      else delete (process.stdout as { isTTY?: boolean }).isTTY;
+    }
+  });
+
   it('names the scope, grays the words and paints the skill names cyan', () => {
-    expect(summaryLine('Installed', [], 'Global scope')).toBe('Installed 0 skills to Global scope');
+    expect(summaryLine('installed', [], 'Global scope')).toBe('Global scope · No skills installed');
     setColorEnabled(true);
-    expect(summaryLine('Installed', ['tdd', 'vitest'], 'Project scope')).toBe(
-      '\x1b[90mInstalled 2 skills to Project scope\x1b[0m \x1b[90m·\x1b[0m \x1b[36mtdd vitest\x1b[0m',
+    expect(summaryLine('installed', ['tdd', 'vitest'], 'Project scope')).toBe(
+      '\x1b[90mProject scope · +2 skills installed\x1b[0m \x1b[90m·\x1b[0m \x1b[36mtdd\x1b[0m\x1b[90m · \x1b[0m\x1b[36mvitest\x1b[0m',
+    );
+  });
+
+  it('splits skills with " · " and adds metadata.version after the name', () => {
+    const v = new Map([
+      ['fdb', '0.0.2'],
+      ['skill-tuning', '0.0.1'],
+    ]);
+    expect(summaryLine('symlinked', ['fdb', 'skill-tuning'], 'Project scope', v)).toBe(
+      'Project scope · +2 skills symlinked · fdb 0.0.2 · skill-tuning 0.0.1',
+    );
+    expect(
+      summaryLine(
+        'installed',
+        ['fdb', 'graphify'],
+        'Project scope',
+        new Map([['graphify', '0.9.96']]),
+      ),
+    ).toBe('Project scope · +2 skills installed · fdb · graphify 0.9.96');
+    expect(summaryLine('installed', ['a', 'b'], 'Project scope')).toBe(
+      'Project scope · +2 skills installed · a · b',
+    );
+  });
+
+  it('paints a skill with its version cyan and the separator gray', () => {
+    setColorEnabled(true);
+    expect(summaryLine('installed', ['a', 'b'], 'Project scope', new Map([['b', '1.0.0']]))).toBe(
+      '\x1b[90mProject scope · +2 skills installed\x1b[0m \x1b[90m·\x1b[0m \x1b[36ma\x1b[0m\x1b[90m · \x1b[0m\x1b[36mb 1.0.0\x1b[0m',
     );
   });
 });
@@ -454,7 +515,7 @@ describe('runAdd - sm mode', () => {
       true,
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
-      'Installed 1 skill to Project scope · cross-review',
+      'Project scope · +1 skill installed · cross-review',
     ]);
   });
 
@@ -464,7 +525,7 @@ describe('runAdd - sm mode', () => {
       0,
     );
     expect(vi.mocked(console.log).mock.calls.map((c) => c[0])).toEqual([
-      'Installed 0 skills to Project scope',
+      'Project scope · No skills installed',
     ]);
   });
 
@@ -532,5 +593,134 @@ describe('defaultSpawn - capture', () => {
     const r = await defaultSpawn(process.execPath, ['-e', script], true);
     expect(r.status).toBe(0);
     expect(r.stdout).toBe('█\n');
+  });
+});
+
+describe('runAdd - entries npx left behind', () => {
+  const agents = (name: string) => join(proj, '.agents', 'skills', name);
+  const claude = (name: string) => join(proj, '.claude', 'skills', name);
+  // a skl sln link into a clone outside the project, with an old mtime so a reinstall stands out
+  function slnLink(path: string, name: string): string {
+    const target = join(tmp, 'clone', 'skills', name);
+    mkdirSync(target, { recursive: true });
+    writeFileSync(join(target, 'SKILL.md'), `---\nname: ${name}\n---\n`);
+    mkdirSync(join(path, '..'), { recursive: true });
+    symlinkSync(target, path);
+    lutimesSync(path, new Date(0), new Date(0));
+    return target;
+  }
+  // what `npx skills add … -a codex` writes: a copy in .agents/skills and the lock entry
+  function installCodex(name: string): void {
+    rmSync(agents(name), { recursive: true, force: true });
+    mkdirSync(agents(name), { recursive: true });
+    writeFileSync(join(agents(name), 'SKILL.md'), `---\nname: ${name}\n---\n`);
+    writeFileSync(
+      join(proj, 'skills-lock.json'),
+      JSON.stringify({ skills: { [name]: { source: 'x' } } }),
+    );
+  }
+
+  it.each([[[]], [['-m', 'md']], [['-m', 'sm']]])(
+    '%j removes a symlink outside -a and keeps its target',
+    async (mode) => {
+      const target = slnLink(claude('tdd'), 'tdd');
+      const spawn = vi.fn(() => {
+        installCodex('tdd');
+        return ok();
+      });
+      const args = ['sentimony/skills', '-s', 'tdd', '-a', 'codex', '-y', ...mode];
+      expect(await runAdd(args, { spawn, cwd: proj })).toBe(0);
+      expect(lstatSync(agents('tdd')).isDirectory()).toBe(true);
+      expect(lstatSync(claude('tdd'), { throwIfNoEntry: false })).toBeUndefined();
+      expect(existsSync(join(target, 'SKILL.md'))).toBe(true);
+    },
+  );
+
+  // what a first `npx skills add -a codex claude-code` leaves: a copy and a link into it
+  function npxLayout(name: string): void {
+    mkdirSync(agents(name), { recursive: true });
+    mkdirSync(join(proj, '.claude', 'skills'), { recursive: true });
+    symlinkSync(`../../.agents/skills/${name}`, claude(name));
+    lutimesSync(claude(name), new Date(0), new Date(0));
+  }
+
+  it('removes a .claude link into .agents that npx did not rewrite with -a codex', async () => {
+    npxLayout('tdd');
+    const spawn = vi.fn(() => {
+      installCodex('tdd');
+      return ok();
+    });
+    const args = ['sentimony/skills', '-a', 'codex', '-y', '-m', 'sm'];
+    expect(await runAdd(args, { spawn, cwd: proj })).toBe(0);
+    expect(lstatSync(claude('tdd'), { throwIfNoEntry: false })).toBeUndefined();
+    expect(console.log).toHaveBeenCalledWith('Project scope · +1 skill installed · tdd');
+  });
+
+  it('keeps the .claude link npx left as it was on a rerun with -a codex claude-code', async () => {
+    npxLayout('tdd');
+    // npx rewrites the copy and leaves a link that already points at it
+    const spawn = vi.fn(() => {
+      installCodex('tdd');
+      return ok();
+    });
+    const args = ['sentimony/skills', '-s', 'tdd', '-a', 'codex', 'claude-code', '-y', '-m', 'sm'];
+    for (let run = 0; run < 2; run++) {
+      expect(await runAdd(args, { spawn, cwd: proj })).toBe(0);
+      expect(readlinkSync(claude('tdd'))).toBe('../../.agents/skills/tdd');
+    }
+  });
+
+  it('without -a keeps a link into the new copy and removes a skl sln link', async () => {
+    npxLayout('tdd');
+    const target = slnLink(claude('vitest'), 'vitest');
+    const spawn = vi.fn(() => {
+      installCodex('tdd');
+      rmSync(agents('vitest'), { recursive: true, force: true });
+      mkdirSync(agents('vitest'), { recursive: true });
+      return ok();
+    });
+    expect(await runAdd(['sentimony/skills', '-y', '-m', 'sm'], { spawn, cwd: proj })).toBe(0);
+    expect(readlinkSync(claude('tdd'))).toBe('../../.agents/skills/tdd');
+    expect(lstatSync(claude('vitest'), { throwIfNoEntry: false })).toBeUndefined();
+    expect(existsSync(join(target, 'SKILL.md'))).toBe(true);
+  });
+
+  it('exits 1 and names the dir when a skill is missing for an agent of -a', async () => {
+    const spawn = vi.fn(() => {
+      installCodex('tdd');
+      return ok();
+    });
+    const args = ['sentimony/skills', '-s', 'tdd', '-a', 'codex', 'claude-code', '-y', '-m', 'sm'];
+    expect(await runAdd(args, { spawn, cwd: proj })).toBe(1);
+    expect(console.error).toHaveBeenCalledWith('skl add: tdd is missing in .claude/skills');
+    expect(console.log).not.toHaveBeenCalled();
+  });
+
+  it('keeps the entries npx rewrote and the skills it did not install', async () => {
+    slnLink(agents('tdd'), 'tdd');
+    slnLink(claude('tdd'), 'tdd');
+    slnLink(claude('vitest'), 'vitest');
+    const spawn = vi.fn(() => {
+      installCodex('tdd');
+      rmSync(claude('tdd'));
+      symlinkSync('../../.agents/skills/tdd', claude('tdd'));
+      return ok();
+    });
+    const args = ['sentimony/skills', '-s', 'tdd', '-a', 'codex', 'claude-code', '-y', '-m', 'sm'];
+    expect(await runAdd(args, { spawn, cwd: proj })).toBe(0);
+    expect(lstatSync(agents('tdd')).isDirectory()).toBe(true);
+    expect(readlinkSync(claude('tdd'))).toBe('../../.agents/skills/tdd');
+    expect(lstatSync(claude('vitest')).isSymbolicLink()).toBe(true);
+  });
+
+  it('leaves everything in place when npx fails', async () => {
+    slnLink(claude('tdd'), 'tdd');
+    const spawn = vi.fn(() => {
+      installCodex('tdd');
+      return { status: 1, stdout: '', stderr: 'boom' };
+    });
+    const args = ['sentimony/skills', '-s', 'tdd', '-a', 'codex', '-y', '-m', 'sm'];
+    expect(await runAdd(args, { spawn, cwd: proj })).toBe(1);
+    expect(lstatSync(claude('tdd')).isSymbolicLink()).toBe(true);
   });
 });
