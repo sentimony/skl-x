@@ -383,6 +383,30 @@ describe('runAdd - md mode', () => {
 describe('summaryLine', () => {
   afterEach(() => setColorEnabled(false));
 
+  it.each([true, false, undefined])('formats skill versions for isTTY=%s', (isTTY) => {
+    const tty = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+    Object.defineProperty(process.stdout, 'isTTY', { value: isTTY, configurable: true });
+    try {
+      const versions = new Map([
+        ['cross-agent', '0.0.11'],
+        ['digits', '2.345.67890'],
+      ]);
+      for (const verb of ['installed', 'symlinked']) {
+        expect(
+          summaryLine(verb, ['cross-agent', 'digits', 'unversioned'], 'Project scope', versions),
+        ).toBe(
+          isTTY
+            ? `Project scope · +3 skills ${verb} · cross-agent ⁰·⁰·¹¹ · digits ²·³⁴⁵·⁶⁷⁸⁹⁰ · unversioned`
+            : `Project scope · +3 skills ${verb} · cross-agent 0.0.11 · digits 2.345.67890 · unversioned`,
+        );
+      }
+      expect(versions.get('cross-agent')).toBe('0.0.11');
+    } finally {
+      if (tty) Object.defineProperty(process.stdout, 'isTTY', tty);
+      else delete (process.stdout as { isTTY?: boolean }).isTTY;
+    }
+  });
+
   it('names the scope, grays the words and paints the skill names cyan', () => {
     expect(summaryLine('installed', [], 'Global scope')).toBe('Global scope · No skills installed');
     setColorEnabled(true);
