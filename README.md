@@ -91,11 +91,14 @@ Symlinking 2 skills from ../skills to Project scope █████████�
 skill           .agents    .claude  skills-lock.json      cost
 cross-review  symlinked  symlinked         -          ~186 tok
 tdd           symlinked  symlinked         -          ~125 tok
-Project scope · +2 skills symlinked · cross-review 0.0.2 · tdd
+Project scope · +2 skills symlinked · cross-review ⁰·⁰·² · tdd
 ```
 
 In the last line of `add` and `sln` the skills are separated by ` · `, and a skill that has
-`metadata.version` in its `SKILL.md` shows it after the name (`cross-review 0.0.2 · tdd`).
+`metadata.version` in its `SKILL.md` shows it after a space. In a terminal, numeric dotted
+versions use superscript digits and middle dots (`cross-review ⁰·⁰·² · tdd`). Other version
+text, including prerelease and build suffixes, stays unchanged. Redirected output keeps the
+original version (`cross-review 0.0.2 · tdd`).
 `ls -m sm` does not show versions.
 
 - Without `-s`, every `<path>/skills/<name>/SKILL.md` is linked (or `<path>/<name>/SKILL.md`

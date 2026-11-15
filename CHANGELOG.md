@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.16 (2026-11-15)
+
+### Changed
+
+1. In a terminal, the last line of `skl add` and `skl sln` shows skill versions with Unicode
+   superscript digits and middle dots, keeping a space after the name: `cross-agent ⁰·⁰·¹¹`.
+   This applies to numeric dotted versions; other text, including prerelease and build
+   suffixes, stays unchanged. Redirected output keeps the original version, such as
+   `cross-agent 0.0.11`.
+
 ## 0.4.15 (2026-11-13)
 
 ### Changed
